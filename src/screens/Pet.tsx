@@ -5,12 +5,11 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  ArrowDown,
-  ArrowUp,
   BellRing,
   CalendarDays,
   Camera,
   Copy,
+  GripVertical,
   LogOut,
   Pencil,
   Plus,
@@ -310,69 +309,131 @@ function FamilySection({
   const toast = useToasts((s) => s.push)
   const [removeTarget, setRemoveTarget] = useState<Member | null>(null)
   const ordered = membersByPriority(snap.members)
+  const listRef = useRef<HTMLDivElement>(null)
+  /** Glisser-déposer en cours : ligne saisie, position cible, décalage doigt. */
+  const [drag, setDrag] = useState<{ from: number; to: number; dy: number; h: number } | null>(null)
+
+  const commitOrder = (ids: string[]) =>
+    void tryAction(async () => {
+      await provider.updateMemberPriorities(ids)
+      toast('Ordre mis à jour', '👍')
+    })
 
   const move = (index: number, delta: number) => {
     const target = index + delta
     if (target < 0 || target >= ordered.length) return
     const ids = ordered.map((m) => m.id)
     ;[ids[index], ids[target]] = [ids[target], ids[index]]
-    void tryAction(() => provider.updateMemberPriorities(ids))
+    commitOrder(ids)
+  }
+
+  const startDrag = (e: React.PointerEvent<HTMLButtonElement>, index: number) => {
+    e.preventDefault()
+    const row = listRef.current?.children[index] as HTMLElement | undefined
+    const h = (row?.getBoundingClientRect().height ?? 56) + 4 // + gap
+    const startY = e.clientY
+    const targetFor = (dy: number) =>
+      Math.min(ordered.length - 1, Math.max(0, index + Math.round(dy / h)))
+    setDrag({ from: index, to: index, dy: 0, h })
+    const onMove = (ev: PointerEvent) => {
+      const dy = ev.clientY - startY
+      setDrag({ from: index, to: targetFor(dy), dy, h })
+    }
+    const onUp = (ev: PointerEvent) => {
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      document.removeEventListener('pointercancel', onUp)
+      setDrag(null)
+      const to = targetFor(ev.clientY - startY)
+      if (to !== index) {
+        const ids = ordered.map((m) => m.id)
+        const [moved] = ids.splice(index, 1)
+        ids.splice(to, 0, moved)
+        commitOrder(ids)
+      }
+    }
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+    document.addEventListener('pointercancel', onUp)
+  }
+
+  /** Décalage visuel des autres lignes pendant le glisser. */
+  const rowShift = (i: number): number => {
+    if (!drag || i === drag.from) return 0
+    if (drag.from < drag.to && i > drag.from && i <= drag.to) return -drag.h
+    if (drag.to < drag.from && i >= drag.to && i < drag.from) return drag.h
+    return 0
   }
 
   return (
     <>
       <SectionTitle>La famille</SectionTitle>
-      <Card className="flex flex-col divide-y divide-bark-100 p-2 dark:divide-night-800">
-        {ordered.map((m, i) => (
-          <div key={m.id} className="flex items-center gap-3 p-2">
-            <Avatar member={m} size="md" />
-            <span className="min-w-0 flex-1 truncate font-bold">
-              {m.name}
-              {m.id === me.id && <span className="font-semibold text-bark-400"> (toi)</span>}
-            </span>
-            {m.role === 'owner' && (
-              <span className="rounded-full bg-sage-100 px-2.5 py-1 text-xs font-bold text-sage-800 dark:bg-sage-900/60 dark:text-sage-200">
-                Propriétaire
+      <Card className="p-2">
+        <div ref={listRef} className="flex flex-col gap-1">
+          {ordered.map((m, i) => (
+            <div
+              key={m.id}
+              className={cx(
+                'flex items-center gap-2 rounded-2xl p-2',
+                drag?.from === i &&
+                  'relative z-10 scale-[1.02] bg-white shadow-lg ring-1 ring-sage-300 dark:bg-night-800 dark:ring-sage-800',
+              )}
+              style={{
+                transform: `translateY(${drag?.from === i ? drag.dy : rowShift(i)}px)`,
+                transition: drag && drag.from !== i ? 'transform 0.15s ease' : undefined,
+              }}
+            >
+              {isOwner && (
+                <button
+                  type="button"
+                  aria-label={`Réordonner ${m.name} (glisser, ou flèches haut/bas)`}
+                  onPointerDown={(e) => startDrag(e, i)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowUp') {
+                      e.preventDefault()
+                      move(i, -1)
+                    }
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault()
+                      move(i, 1)
+                    }
+                  }}
+                  className="flex size-9 shrink-0 cursor-grab touch-none items-center justify-center rounded-full text-bark-400 active:cursor-grabbing active:bg-bark-100 dark:active:bg-night-800"
+                >
+                  <GripVertical className="size-5" />
+                </button>
+              )}
+              <span className="w-4 shrink-0 text-center text-xs font-black text-bark-400" aria-hidden>
+                {i + 1}
               </span>
-            )}
-            {isOwner && (
-              <div className="flex items-center gap-1">
+              <Avatar member={m} size="md" />
+              <span className="min-w-0 flex-1 truncate font-bold">
+                {m.name}
+                {m.id === me.id && <span className="font-semibold text-bark-400"> (toi)</span>}
+              </span>
+              {m.role === 'owner' && (
+                <span className="rounded-full bg-sage-100 px-2.5 py-1 text-xs font-bold text-sage-800 dark:bg-sage-900/60 dark:text-sage-200">
+                  Propriétaire
+                </span>
+              )}
+              {isOwner && m.role !== 'owner' && (
                 <button
                   type="button"
-                  aria-label={`Monter ${m.name} dans la liste`}
-                  disabled={i === 0}
-                  onClick={() => move(i, -1)}
-                  className="flex size-9 items-center justify-center rounded-full text-bark-500 active:bg-bark-100 disabled:opacity-30 dark:active:bg-night-800"
+                  aria-label={`Retirer ${m.name} du foyer`}
+                  onClick={() => setRemoveTarget(m)}
+                  className="flex size-9 shrink-0 items-center justify-center rounded-full text-red-500 active:bg-red-50 dark:active:bg-red-950/40"
                 >
-                  <ArrowUp className="size-4" />
+                  <UserMinus className="size-4" />
                 </button>
-                <button
-                  type="button"
-                  aria-label={`Descendre ${m.name} dans la liste`}
-                  disabled={i === ordered.length - 1}
-                  onClick={() => move(i, 1)}
-                  className="flex size-9 items-center justify-center rounded-full text-bark-500 active:bg-bark-100 disabled:opacity-30 dark:active:bg-night-800"
-                >
-                  <ArrowDown className="size-4" />
-                </button>
-                {m.role !== 'owner' && (
-                  <button
-                    type="button"
-                    aria-label={`Retirer ${m.name} du foyer`}
-                    onClick={() => setRemoveTarget(m)}
-                    className="flex size-9 items-center justify-center rounded-full text-red-500 active:bg-red-50 dark:active:bg-red-950/40"
-                  >
-                    <UserMinus className="size-4" />
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        ))}
+              )}
+            </div>
+          ))}
+        </div>
       </Card>
       {isOwner && (
         <p className="mt-2 px-2 text-xs text-bark-500 dark:text-bark-400">
-          L’ordre définit qui est prévenu·e en premier lors d’une demande de remplacement.
+          L’ordre définit qui est prévenu·e en premier lors d’une demande de remplacement — fais
+          glisser une ligne par sa poignée pour réordonner.
         </p>
       )}
       {isOwner && (
