@@ -9,6 +9,9 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       registerType: 'autoUpdate',
       includeAssets: ['icons/favicon.svg', 'icons/apple-touch-icon.png'],
       manifest: {
@@ -29,9 +32,8 @@ export default defineConfig({
           { src: '/icons/pwa-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
-      workbox: {
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
-        navigateFallback: '/index.html',
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
       },
     }),
