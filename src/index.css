@@ -1,0 +1,129 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Nunito Variable', 'Nunito', ui-rounded, system-ui, -apple-system, sans-serif;
+
+  /* Vert sauge — couleur principale */
+  --color-sage-50: #f3f7f3;
+  --color-sage-100: #e2eee4;
+  --color-sage-200: #c6dcca;
+  --color-sage-300: #9fc3a7;
+  --color-sage-400: #76a481;
+  --color-sage-500: #578764;
+  --color-sage-600: #446c50;
+  --color-sage-700: #385741;
+  --color-sage-800: #2f4636;
+  --color-sage-900: #283a2e;
+  --color-sage-950: #142019;
+
+  /* Pêche — accent chaleureux */
+  --color-peach-50: #fef5f0;
+  --color-peach-100: #fde8dc;
+  --color-peach-200: #facdb4;
+  --color-peach-300: #f5ab83;
+  --color-peach-400: #ee8354;
+  --color-peach-500: #e76632;
+  --color-peach-600: #d54e22;
+  --color-peach-700: #b13c1e;
+  --color-peach-800: #8d3220;
+  --color-peach-900: #722c1e;
+
+  /* Crème & neutres chauds */
+  --color-cream: #faf7f2;
+  --color-bark-50: #f8f6f3;
+  --color-bark-100: #eeeae4;
+  --color-bark-200: #dcd4c8;
+  --color-bark-300: #c3b7a5;
+  --color-bark-400: #a99a83;
+  --color-bark-500: #97866e;
+  --color-bark-600: #8a7862;
+  --color-bark-700: #736252;
+  --color-bark-800: #5f5246;
+  --color-bark-900: #4e443b;
+  --color-bark-950: #292420;
+
+  /* Fond sombre */
+  --color-night-800: #1d2620;
+  --color-night-850: #19211b;
+  --color-night-900: #151d18;
+  --color-night-950: #0f1512;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  @apply bg-cream text-bark-950 antialiased dark:bg-night-900 dark:text-bark-100;
+  font-family: var(--font-sans);
+  overscroll-behavior-y: none;
+}
+
+/* Zones sûres iOS (encoche / barre home) */
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+input[type='time']::-webkit-calendar-picker-indicator,
+input[type='date']::-webkit-calendar-picker-indicator {
+  opacity: 0.5;
+}
+
+@keyframes paw-float {
+  0% {
+    transform: translateY(0) scale(0.6) rotate(var(--paw-rot, 0deg));
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-110px) scale(1.15) rotate(var(--paw-rot, 0deg));
+    opacity: 0;
+  }
+}
+.animate-paw {
+  animation: paw-float 1.1s ease-out forwards;
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+.animate-sheet {
+  animation: sheet-up 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-fade {
+  animation: fade-in 0.18s ease-out;
+}
+
+@keyframes toast-in {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.animate-toast {
+  animation: toast-in 0.2s ease-out;
+}
