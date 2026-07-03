@@ -77,18 +77,20 @@ export function Card({
   children: ReactNode
   onClick?: () => void
 }) {
-  return (
-    <div
-      onClick={onClick}
-      className={cx(
-        'rounded-3xl bg-white p-4 shadow-sm shadow-bark-200/40 dark:bg-night-850 dark:shadow-none dark:ring-1 dark:ring-night-800',
-        onClick && 'cursor-pointer active:scale-[0.99] transition-transform',
-        className,
-      )}
-    >
-      {children}
-    </div>
+  const cls = cx(
+    'rounded-3xl bg-white p-4 text-left shadow-sm shadow-bark-200/40 dark:bg-night-850 dark:shadow-none dark:ring-1 dark:ring-night-800',
+    onClick && 'w-full cursor-pointer transition-transform active:scale-[0.99]',
+    className,
   )
+  // Une carte cliquable doit être un vrai bouton (clavier, lecteurs d'écran).
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={cls}>
+        {children}
+      </button>
+    )
+  }
+  return <div className={cls}>{children}</div>
 }
 
 export function SectionTitle({ children, action }: { children: ReactNode; action?: ReactNode }) {
@@ -252,9 +254,36 @@ export function Sheet({
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    // Focus initial dans le dialogue, verrouillage du scroll de fond,
+    // piège à Tab et restauration du focus à la fermeture.
+    const previouslyFocused = document.activeElement as HTMLElement | null
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    ref.current?.focus()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+      if (e.key === 'Tab' && ref.current) {
+        const focusables = ref.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, textarea, select, [tabindex]:not([tabindex="-1"])',
+        )
+        if (focusables.length === 0) return
+        const first = focusables[0]
+        const last = focusables[focusables.length - 1]
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault()
+          last.focus()
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault()
+          first.focus()
+        }
+      }
+    }
     document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = previousOverflow
+      previouslyFocused?.focus?.()
+    }
   }, [open, onClose])
 
   if (!open) return null
@@ -263,10 +292,11 @@ export function Sheet({
       <div className="animate-fade absolute inset-0 bg-bark-950/40" onClick={onClose} aria-hidden />
       <div
         ref={ref}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="animate-sheet pb-safe relative z-10 max-h-[88dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-cream p-5 dark:bg-night-900"
+        className="animate-sheet pb-safe relative z-10 max-h-[88dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-cream p-5 outline-none dark:bg-night-900"
       >
         <div className="mb-3 flex items-center justify-between gap-4">
           <h2 className="text-lg font-extrabold">{title}</h2>

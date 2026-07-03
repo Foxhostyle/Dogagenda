@@ -4,7 +4,7 @@ import { useApp } from '../store/useApp'
 import { cx } from './ui'
 
 const tabs = [
-  { to: '/aujourdhui', label: "Aujourd'hui", icon: Sun },
+  { to: '/aujourdhui', label: 'Aujourd’hui', icon: Sun },
   { to: '/planning', label: 'Planning', icon: CalendarDays },
   { to: '/discussion', label: 'Discussion', icon: MessageCircle },
   { to: '/wint', label: null, icon: PawPrint }, // libellé = nom de l'animal

@@ -139,7 +139,7 @@ await page.getByRole('button', { name: 'Changer de membre (démo)' }).click()
 await settle()
 await page.getByRole('button', { name: 'Léa', exact: true }).click()
 await settle()
-await page.getByRole('link', { name: "Aujourd'hui" }).click()
+await page.getByRole('link', { name: /Aujourd/ }).click()
 await settle()
 const banner = page.locator('div.bg-peach-50')
 check(
@@ -158,7 +158,7 @@ await page.getByRole('button', { name: 'Changer de membre (démo)' }).click()
 await settle()
 await page.getByRole('button', { name: 'Marco', exact: true }).click()
 await settle()
-await page.getByRole('link', { name: "Aujourd'hui" }).click()
+await page.getByRole('link', { name: /Aujourd/ }).click()
 await settle()
 check(
   await page.locator('div.bg-peach-50').getByText(/Bastien cherche un remplaçant/).isVisible(),
@@ -172,7 +172,7 @@ check(await page.getByText(/Marco remplace Bastien/).isVisible(), 'Message syst�
 
 // --- 10. Mode sombre -----------------------------------------------------------
 await page.emulateMedia({ colorScheme: 'dark' })
-await page.getByRole('link', { name: "Aujourd'hui" }).click()
+await page.getByRole('link', { name: /Aujourd/ }).click()
 await settle()
 await shot('07-mode-sombre')
 await page.emulateMedia({ colorScheme: 'light' })

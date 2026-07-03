@@ -322,15 +322,58 @@ Deno.serve(async () => {
   }
 
   // ---------------------------------------------------------------------------
-  // (d) Escalade des remplacements : cible silencieuse depuis plus de 30 min
+  // (d) Remplacements : notifier la cible courante, puis escalader si silence.
+  //
+  // Le push initial est normalement envoyé par la fonction `notify` (appelée
+  // par l'application juste après la création/refus) ; ce bloc sert de filet
+  // de sécurité et de chronomètre d'escalade : le délai court à partir du
+  // moment où la cible a RÉELLEMENT été notifiée (clé `swap:` du reminder_log),
+  // jamais avant — personne n'est « refusé » sans avoir été prévenu.
   // ---------------------------------------------------------------------------
+  const { data: hhData } = await db.from('households').select('id, swap_escalate_minutes')
+  const escalateByHousehold = new Map(
+    ((hhData ?? []) as { id: string; swap_escalate_minutes?: number }[]).map((h) => [
+      h.id,
+      h.swap_escalate_minutes ?? SWAP_ESCALATE_MINUTES,
+    ]),
+  )
   const { data: swapsData } = await db.from('swap_requests').select('*').eq('status', 'open')
-  const staleBefore = now.getTime() - SWAP_ESCALATE_MINUTES * 60_000
   for (const swap of (swapsData ?? []) as SwapRow[]) {
     const cascade: CascadeStep[] = Array.isArray(swap.cascade) ? swap.cascade : []
     const last = cascade[cascade.length - 1]
     if (!last || last.response) continue
-    if (Date.parse(last.notifiedAt) >= staleBefore) continue
+
+    const requesterName = memberById.get(swap.requester_id)?.name ?? 'Quelqu’un'
+    const swapLabel = swap.walk_slot_date
+      ? `la promenade du ${frDate(swap.walk_slot_date)}`
+      : 'sa garde'
+
+    // 1. La cible courante n'a pas encore reçu de push ? On l'envoie et le
+    //    chronomètre d'escalade démarre maintenant.
+    const notifyKey = `swap:${swap.id}:${last.memberId}`
+    const { data: logRow } = await db
+      .from('reminder_log')
+      .select('sent_at')
+      .eq('key', notifyKey)
+      .maybeSingle()
+    if (!logRow) {
+      await db.from('reminder_log').insert({ key: notifyKey })
+      const target = memberById.get(last.memberId)
+      if (target && canReceive(target.id, 'swaps')) {
+        await notify(target, {
+          title: 'Un coup de patte ? 🙏',
+          body: `${requesterName} cherche un remplaçant pour ${swapLabel}.${swap.message ? ` « ${swap.message} »` : ''}`,
+          tag: 'swap-request',
+          url: '/aujourdhui',
+          swapId: swap.id,
+        })
+      }
+      continue
+    }
+
+    // 2. Escalade : silence depuis plus de N minutes (réglable par foyer).
+    const escalateMinutes = escalateByHousehold.get(swap.household_id) ?? SWAP_ESCALATE_MINUTES
+    if (Date.parse(logRow.sent_at) >= now.getTime() - escalateMinutes * 60_000) continue
 
     // Silence vaut refus : on marque le maillon puis on passe au suivant
     // (même logique que le RPC respond_swap en cas de refus).
@@ -349,25 +392,24 @@ Deno.serve(async () => {
         (a, b) => a.priority_rank - b.priority_rank || a.created_at.localeCompare(b.created_at),
       )[0]
 
-    const requester = memberById.get(swap.requester_id)
-    const label = swap.walk_slot_date
-      ? `la promenade du ${frDate(swap.walk_slot_date)}`
-      : 'sa garde'
-
     if (next) {
       cascade.push({ memberId: next.id, notifiedAt: now.toISOString() })
       const { error } = await db.from('swap_requests').update({ cascade }).eq('id', swap.id)
       if (error) continue
+      // La clé de notification du nouveau maillon démarre son chronomètre.
+      await db.from('reminder_log').insert({ key: `swap:${swap.id}:${next.id}` })
       if (canReceive(next.id, 'swaps')) {
         await notify(next, {
           title: 'Un coup de patte ? 🙏',
-          body: `${requester?.name ?? 'Quelqu’un'} cherche un remplaçant pour ${label}.${swap.message ? ` « ${swap.message} »` : ''}`,
+          body: `${requesterName} cherche un remplaçant pour ${swapLabel}.${swap.message ? ` « ${swap.message} »` : ''}`,
           tag: 'swap-request',
-          url: '/',
+          url: '/aujourdhui',
+          swapId: swap.id,
         })
       }
     } else {
-      // Liste épuisée : la demande reste ouverte à tous + message SOS dans le fil.
+      // Liste épuisée : la demande reste ouverte à tous + message SOS dans le
+      // fil + push à tout le foyer (sauf le demandeur).
       const { error } = await db
         .from('swap_requests')
         .update({ cascade, status: 'exhausted' })
@@ -376,10 +418,33 @@ Deno.serve(async () => {
       await db.from('messages').insert({
         household_id: swap.household_id,
         kind: 'system',
-        text: `Personne n’est disponible pour ${label} pour l’instant — quelqu’un peut aider ? 🆘`,
+        text: `Personne n’est disponible pour ${swapLabel} pour l’instant — quelqu’un peut aider ? 🆘`,
       })
+      const household = members.filter(
+        (m) => m.household_id === swap.household_id && m.id !== swap.requester_id,
+      )
+      for (const member of household) {
+        if (!canReceive(member.id, 'swaps')) continue
+        const key = `swap-sos:${swap.id}:${member.id}`
+        if (await alreadySent(key)) continue
+        await notify(member, {
+          title: 'SOS promenade 🆘',
+          body: `Personne n’est disponible pour ${swapLabel} — tu peux aider ?`,
+          tag: 'swap-request',
+          url: '/aujourdhui',
+          swapId: swap.id,
+        })
+      }
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Ménage : les clés de déduplication de plus de 30 jours ne servent plus.
+  // ---------------------------------------------------------------------------
+  await db
+    .from('reminder_log')
+    .delete()
+    .lt('sent_at', new Date(now.getTime() - 30 * 24 * 3600_000).toISOString())
 
   return new Response(JSON.stringify({ ok: true, sent }), {
     headers: { 'Content-Type': 'application/json' },

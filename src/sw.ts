@@ -25,6 +25,8 @@ interface PushPayload {
   body?: string
   tag?: string
   url?: string
+  /** Présent sur les demandes de remplacement : active Accepter/Refuser. */
+  swapId?: string
 }
 
 self.addEventListener('push', (event) => {
@@ -40,14 +42,27 @@ self.addEventListener('push', (event) => {
       tag: payload.tag,
       icon: '/icons/pwa-192.png',
       badge: '/icons/pwa-192.png',
-      data: { url: payload.url ?? '/' },
+      data: { url: payload.url ?? '/', swapId: payload.swapId },
+      // Répondre à une demande de remplacement sans ouvrir l'app.
+      ...(payload.swapId
+        ? {
+            actions: [
+              { action: 'accept', title: 'J’accepte 🙌' },
+              { action: 'decline', title: 'Je ne peux pas' },
+            ],
+          }
+        : {}),
     }),
   )
 })
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
-  const url: string = event.notification.data?.url ?? '/'
+  const data = event.notification.data as { url?: string; swapId?: string } | undefined
+  let url: string = data?.url ?? '/'
+  if (event.action && data?.swapId) {
+    url = `/aujourdhui?swap=${data.swapId}&action=${event.action === 'accept' ? 'accept' : 'decline'}`
+  }
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (clients) => {
       const existing = clients.find((c) => 'focus' in c)

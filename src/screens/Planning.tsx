@@ -44,6 +44,12 @@ import { tryAction, useToasts } from '../store/useToasts'
 
 type Scope = 'one' | 'template' | 'week'
 
+/** « matin » → « matins », « après-midi » → « après-midis » (déjà en -s : inchangé). */
+function pluralizeSlot(name: string): string {
+  const lower = name.toLowerCase()
+  return lower.endsWith('s') ? lower : `${lower}s`
+}
+
 /** `HH:mm` local d'un instant ISO. */
 function timeOf(iso: string): string {
   const d = parseIso(iso)
@@ -356,11 +362,11 @@ function WeekActions({ snap, monday }: { snap: AppSnapshot; monday: DateStr }) {
 
   return (
     <div className="mb-3 flex gap-2">
-      <Button variant="soft" size="sm" className="flex-1" onClick={duplicate}>
-        <Copy className="size-4" aria-hidden /> Dupliquer la semaine précédente
+      <Button variant="soft" size="sm" className="h-auto min-w-0 flex-1 py-2 text-xs" onClick={duplicate}>
+        <Copy className="size-4 shrink-0" aria-hidden /> Dupliquer la semaine précédente
       </Button>
-      <Button variant="soft" size="sm" onClick={() => setTemplateSheet(true)}>
-        <Star className="size-4" aria-hidden /> Semaine type
+      <Button variant="soft" size="sm" className="h-auto shrink-0 py-2 text-xs" onClick={() => setTemplateSheet(true)}>
+        <Star className="size-4 shrink-0" aria-hidden /> Semaine type
       </Button>
 
       <Sheet open={templateSheet} onClose={() => setTemplateSheet(false)} title="Semaine type ⭐">
@@ -487,7 +493,7 @@ function WeekGrid({
                 {(
                   [
                     { value: 'one', label: 'Ce créneau' },
-                    { value: 'template', label: `Tous les ${target.template.name.toLowerCase()}` },
+                    { value: 'template', label: `Tous les ${pluralizeSlot(target.template.name)}` },
                     { value: 'week', label: 'Toute la semaine' },
                   ] as const
                 ).map((o) => (
@@ -550,7 +556,7 @@ function SlotChip({
         {assigned ? (
           <Avatar member={assigned} size="sm" />
         ) : (
-          <span className="flex size-8 items-center justify-center rounded-full border-2 border-dashed border-bark-300 text-sm text-bark-400 dark:border-night-700">
+          <span className="flex size-8 items-center justify-center rounded-full border-2 border-dashed border-bark-300 text-sm text-bark-400 dark:border-night-800">
             ∅
           </span>
         )}
@@ -565,6 +571,9 @@ function SlotChip({
       </span>
       <span className="max-w-full truncate text-[10px] font-bold text-bark-500 dark:text-bark-400">
         {template.name}
+      </span>
+      <span className="text-[9px] font-semibold text-bark-400 dark:text-bark-500" aria-hidden>
+        {hours.replace(/\s/g, '')}
       </span>
     </button>
   )

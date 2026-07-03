@@ -86,13 +86,28 @@ function icsEscape(text: string): string {
     .replace(/\r?\n/g, '\\n')
 }
 
-/** Plie les lignes de plus de 74 caractères (continuation par un espace). */
+/**
+ * Plie une ligne à ≤ 74 octets (RFC 5545) en itérant par points de code :
+ * un émoji ou un accent n'est jamais coupé au milieu de sa séquence.
+ */
 function icsFold(line: string): string[] {
-  if (line.length <= 74) return [line]
-  const out: string[] = [line.slice(0, 74)]
-  for (let i = 74; i < line.length; i += 73) {
-    out.push(' ' + line.slice(i, i + 73))
+  const encoder = new TextEncoder()
+  const out: string[] = []
+  let current = ''
+  let bytes = 0
+  for (const ch of line) {
+    const b = encoder.encode(ch).length
+    const max = out.length === 0 ? 74 : 73 // les suites portent un espace en tête
+    if (bytes + b > max) {
+      out.push(out.length === 0 ? current : ' ' + current)
+      current = ch
+      bytes = b
+    } else {
+      current += ch
+      bytes += b
+    }
   }
+  out.push(out.length === 0 ? current : ' ' + current)
   return out
 }
 

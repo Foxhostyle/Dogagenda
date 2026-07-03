@@ -22,6 +22,8 @@ export interface PushPayload {
   tag?: string
   /** Chemin ouvert au tap (ex. « /planning »). */
   url?: string
+  /** Pour les demandes de remplacement : ajoute les boutons Accepter/Refuser. */
+  swapId?: string
 }
 
 /**

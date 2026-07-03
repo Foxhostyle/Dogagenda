@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
+  CalendarPlus,
   Check,
   ChevronRight,
   Clock,
@@ -35,7 +36,8 @@ import {
   type DaySlotView,
 } from '../domain/logic'
 import type { AppSnapshot, Member, PhotoRef, SwapRequest } from '../domain/types'
-import { formatDayLong, formatInstant, formatTime, todayStr, type DateStr } from '../lib/dates'
+import { atTime, formatDayLong, formatInstant, formatTime, todayStr, type DateStr } from '../lib/dates'
+import { buildSingleEventIcs } from '../lib/ics'
 import { usePhotoUrl } from '../lib/photos'
 import { memberById, useActiveMember, useApp } from '../store/useApp'
 import { tryAction, useToasts } from '../store/useToasts'
@@ -58,6 +60,21 @@ export default function Today() {
   const me = useActiveMember()
   void tick // recalcul des statuts chaque minute
   const [burstKey, setBurstKey] = useState(0)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const toast = useToasts((s) => s.push)
+
+  // Réponse à une demande depuis les boutons de la notification push
+  // (le service worker ouvre /aujourdhui?swap=…&action=accept|decline).
+  useEffect(() => {
+    const swapId = searchParams.get('swap')
+    const action = searchParams.get('action')
+    if (!swapId || !action) return
+    setSearchParams({}, { replace: true })
+    void tryAction(async () => {
+      await provider.respondSwap(swapId, action === 'accept')
+      toast(action === 'accept' ? 'Merci, c’est noté !' : 'Refus transmis', action === 'accept' ? '🙌' : '👌')
+    })
+  }, [searchParams, setSearchParams, toast])
 
   if (!snap || !me) return null
   const now = new Date()
@@ -152,6 +169,10 @@ function CareCard({ snap, me, now }: { snap: AppSnapshot; me: Member; now: Date 
 
   const keeper = memberById(snap, care.memberId)
   const relayTarget = nextCascadeTarget(snap.members, me.id, [])
+  // Une seule demande de relais à la fois pour une même garde.
+  const hasOpenRelay = snap.swapRequests.some(
+    (s) => s.carePeriodId === care.id && (s.status === 'open' || s.status === 'exhausted'),
+  )
 
   return (
     <Card className="mt-2">
@@ -168,7 +189,7 @@ function CareCard({ snap, me, now }: { snap: AppSnapshot; me: Member; now: Date 
             )}
           </p>
         </div>
-        {care.memberId === me.id && snap.members.length > 1 && (
+        {care.memberId === me.id && snap.members.length > 1 && !hasOpenRelay && (
           <button
             type="button"
             onClick={() => setConfirmRelay(true)}
@@ -268,23 +289,45 @@ function SwapBanners({ snap, me }: { snap: AppSnapshot; me: Member }) {
             ? memberById(snap, target.memberId)?.name
             : null
         return (
-          <Card key={swap.id} className="flex items-center gap-3">
-            <Clock className="size-5 shrink-0 text-bark-400" aria-hidden />
-            <p className="flex-1 text-sm font-semibold text-bark-600 dark:text-bark-400">
-              Remplacement pour {describeSwap(snap, swap)} :{' '}
-              {waiting ? `en attente de ${waiting}…` : 'en attente d’un volontaire…'}
-            </p>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() =>
-                void tryAction(async () => {
-                  await provider.cancelSwap(swap.id)
-                })
-              }
-            >
-              Annuler
-            </Button>
+          <Card key={swap.id}>
+            <div className="flex items-center gap-3">
+              <Clock className="size-5 shrink-0 text-bark-400" aria-hidden />
+              <p className="flex-1 text-sm font-semibold text-bark-600 dark:text-bark-400">
+                Remplacement pour {describeSwap(snap, swap)} :{' '}
+                {waiting ? `en attente de ${waiting}…` : 'en attente d’un volontaire…'}
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  void tryAction(async () => {
+                    await provider.cancelSwap(swap.id)
+                  })
+                }
+              >
+                Annuler
+              </Button>
+            </div>
+            {/* Où en est la cascade : qui a été sollicité, qui a refusé. */}
+            {swap.cascade.length > 0 && (
+              <div className="mt-2 flex flex-col gap-1.5 border-t border-bark-100 pt-2 dark:border-night-800">
+                {swap.cascade.map((step) => {
+                  const stepMember = memberById(snap, step.memberId)
+                  return (
+                    <p
+                      key={step.memberId}
+                      className="flex items-center gap-2 text-xs font-semibold text-bark-500 dark:text-bark-400"
+                    >
+                      <Avatar member={stepMember} size="xs" />
+                      {stepMember?.name ?? 'Un membre'}{' '}
+                      {step.response === 'declined'
+                        ? 'n’est pas disponible'
+                        : `— sollicité·e à ${formatInstant(step.notifiedAt)}`}
+                    </p>
+                  )
+                })}
+              </div>
+            )}
           </Card>
         )
       })}
@@ -337,6 +380,25 @@ function SlotCard({
       setPostSheet(true)
     })
 
+  // « Ajouter cet événement à mon agenda » : .ics d'un seul événement.
+  const addToAgenda = () => {
+    const ics = buildSingleEventIcs(
+      `walk-${date}-${template.id}`,
+      atTime(date, template.startTime),
+      atTime(date, template.endTime),
+      `🐾 Promenade ${template.name} – ${snap.pet.name}`,
+    )
+    const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `promenade-${date}.ics`
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    setMenuOpen(false)
+    toast('Événement téléchargé', '📅')
+  }
+
   return (
     <Card
       className={cx(
@@ -353,20 +415,26 @@ function SlotCard({
           <p className="font-extrabold">{template.name}</p>
           <p className="text-xs font-semibold text-bark-500 dark:text-bark-400">{hours}</p>
         </div>
-        <button
-          type="button"
-          onClick={() => (status === 'done' || status === 'skipped' ? undefined : setPickerOpen(true))}
-          className="flex items-center gap-1.5 rounded-2xl px-2 py-1 active:bg-bark-50 dark:active:bg-night-800"
-          aria-label="Changer le promeneur"
-        >
-          {assigned ? (
-            <MemberTag member={assigned} />
-          ) : (
-            <span className="inline-flex items-center gap-1 text-sm font-semibold text-bark-400">
-              <UserRound className="size-4" aria-hidden /> Personne
-            </span>
-          )}
-        </button>
+        {status === 'done' || status === 'skipped' ? (
+          <span className="flex items-center gap-1.5 px-2 py-1">
+            {assigned && <MemberTag member={assigned} />}
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            className="flex items-center gap-1.5 rounded-2xl px-2 py-1 active:bg-bark-50 dark:active:bg-night-800"
+            aria-label="Changer le promeneur"
+          >
+            {assigned ? (
+              <MemberTag member={assigned} />
+            ) : (
+              <span className="inline-flex items-center gap-1 text-sm font-semibold text-bark-400">
+                <UserRound className="size-4" aria-hidden /> Personne
+              </span>
+            )}
+          </button>
+        )}
         <button
           type="button"
           aria-label="Plus d'options"
@@ -492,6 +560,9 @@ function SlotCard({
             onClick={() => navigate(`/discussion?date=${date}&slot=${template.id}`)}
           >
             <MessageCircle className="size-5" aria-hidden /> Commenter dans la discussion
+          </Button>
+          <Button variant="soft" fullWidth onClick={addToAgenda}>
+            <CalendarPlus className="size-5" aria-hidden /> Ajouter à mon agenda (.ics)
           </Button>
         </div>
       </Sheet>

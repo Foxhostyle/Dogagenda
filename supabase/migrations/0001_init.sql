@@ -18,6 +18,8 @@ create table public.households (
   id          uuid primary key default gen_random_uuid(),
   name        text not null,
   invite_code text unique not null,
+  -- Minutes sans réponse avant de faire avancer la cascade de remplacement.
+  swap_escalate_minutes int not null default 30,
   created_at  timestamptz not null default now()
 );
 
@@ -60,13 +62,20 @@ create table public.slot_templates (
   active       boolean not null default true
 );
 
+-- Nécessaire à la contrainte d'exclusion anti-chevauchement des gardes.
+create extension if not exists btree_gist;
+
 create table public.care_periods (
   id        uuid primary key default gen_random_uuid(),
   pet_id    uuid not null references public.pets (id) on delete cascade,
   member_id uuid not null references public.members (id) on delete cascade,
   start_at  timestamptz not null,
   end_at    timestamptz not null,
-  check (start_at < end_at)
+  check (start_at < end_at),
+  -- Deux appareils simultanés ne peuvent pas créer deux gardes qui se
+  -- chevauchent : garanti au niveau base, pas seulement côté client.
+  constraint care_periods_no_overlap
+    exclude using gist (pet_id with =, tstzrange(start_at, end_at) with &&)
 );
 
 create table public.walk_slots (
@@ -486,12 +495,13 @@ create or replace function public.create_swap_request(
   p_care_period_id uuid,
   p_message text
 )
-returns void
+returns json
 language plpgsql security definer set search_path = public
 as $$
 declare
   v_me     members%rowtype;
   v_target uuid;
+  v_id     uuid;
   v_now    text := iso_now();
 begin
   select * into v_me from members
@@ -519,12 +529,15 @@ begin
      case when v_target is null then 'exhausted' else 'open' end,
      case when v_target is null then '[]'::jsonb
           else jsonb_build_array(jsonb_build_object('memberId', v_target, 'notifiedAt', v_now))
-     end);
+     end)
+  returning id into v_id;
 
   insert into messages (household_id, kind, text)
   values (v_me.household_id, 'system',
           v_me.name || ' cherche un remplaçant pour '
           || swap_label(p_walk_slot_date, p_care_period_id) || ' 🙏');
+
+  return json_build_object('swap_id', v_id);
 end;
 $$;
 
@@ -589,19 +602,23 @@ begin
     return;
   end if;
 
-  -- Refus : on marque le maillon courant puis on fait avancer la cascade.
+  -- Refus : uniquement si l'appelant EST la cible courante non répondue —
+  -- sinon (double tap, bannière périmée après escalade) un membre serait
+  -- silencieusement sauté dans la cascade.
   v_cascade := v_swap."cascade";
   v_len := jsonb_array_length(v_cascade);
-  if v_len > 0 then
-    v_last := v_cascade -> (v_len - 1);
-    if not (v_last ? 'response') and (v_last ->> 'memberId')::uuid = v_me.id then
-      v_cascade := jsonb_set(
-        v_cascade,
-        array[(v_len - 1)::text],
-        v_last || jsonb_build_object('response', 'declined', 'respondedAt', v_now)
-      );
-    end if;
+  if v_len = 0 then
+    return;
   end if;
+  v_last := v_cascade -> (v_len - 1);
+  if (v_last ? 'response') or (v_last ->> 'memberId')::uuid <> v_me.id then
+    return;
+  end if;
+  v_cascade := jsonb_set(
+    v_cascade,
+    array[(v_len - 1)::text],
+    v_last || jsonb_build_object('response', 'declined', 'respondedAt', v_now)
+  );
 
   -- Personne suivante : par rang de priorité, hors demandeur, hors invités,
   -- hors membres déjà sollicités.

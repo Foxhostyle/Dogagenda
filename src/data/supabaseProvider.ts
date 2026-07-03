@@ -42,6 +42,7 @@ const mapHousehold = (r: Row): Household => ({
   id: r.id,
   name: r.name,
   inviteCode: r.invite_code,
+  swapEscalateMinutes: r.swap_escalate_minutes ?? 30,
   createdAt: r.created_at,
 })
 
@@ -142,6 +143,31 @@ function fail(error: { message: string } | null): void {
   if (error) throw new Error(error.message)
 }
 
+function isNetworkError(e: unknown): boolean {
+  return /fetch|network|load failed|networkerror/i.test(String((e as Error)?.message ?? e))
+}
+
+/** « du matin 🌅 » / « de l’après-midi ☀️ » — article français correct. */
+function slotName(template: { name: string; emoji: string } | undefined | null): string {
+  if (!template) return ''
+  const lower = template.name.toLowerCase()
+  const article = /^[aeéèiouyh]/.test(lower) ? 'de l’' : 'du '
+  return `${article}${lower} ${template.emoji}`
+}
+
+/** Cache local du dernier snapshot : l'app s'ouvre hors-ligne avec les dernières données. */
+const CACHE_KEY = 'dogagenda.supabase.cache'
+/** File des validations faites hors-ligne, rejouées au retour du réseau. */
+const QUEUE_KEY = 'dogagenda.supabase.queue'
+
+interface QueuedWalkOp {
+  kind: 'validate' | 'skip'
+  date: string
+  slotTemplateId: string
+  note?: string
+  photo?: string
+}
+
 export class SupabaseProvider implements DataProvider {
   readonly mode = 'supabase' as const
   private client: SupabaseClient
@@ -153,6 +179,101 @@ export class SupabaseProvider implements DataProvider {
 
   constructor(url: string, anonKey: string) {
     this.client = createClient(url, anonKey)
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', () => void this.flushQueue())
+    }
+  }
+
+  // --- Cache hors-ligne + file de synchro -------------------------------------
+
+  private readCache(): { session: Session; snap: AppSnapshot } | null {
+    try {
+      const raw = localStorage.getItem(CACHE_KEY)
+      return raw ? (JSON.parse(raw) as { session: Session; snap: AppSnapshot }) : null
+    } catch {
+      return null
+    }
+  }
+
+  private writeCache(session: Session, snap: AppSnapshot): void {
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ session, snap }))
+    } catch {
+      // stockage plein : tant pis pour le cache
+    }
+  }
+
+  private readQueue(): QueuedWalkOp[] {
+    try {
+      const raw = localStorage.getItem(QUEUE_KEY)
+      return raw ? (JSON.parse(raw) as QueuedWalkOp[]) : []
+    } catch {
+      return []
+    }
+  }
+
+  private writeQueue(queue: QueuedWalkOp[]): void {
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(queue))
+  }
+
+  /** Rejoue les validations mises en file hors-ligne. */
+  private async flushQueue(): Promise<void> {
+    const queue = this.readQueue()
+    if (queue.length === 0) return
+    this.writeQueue([])
+    for (const op of queue) {
+      try {
+        if (op.kind === 'validate') {
+          await this.validateWalk({
+            date: op.date,
+            slotTemplateId: op.slotTemplateId,
+            note: op.note,
+            photo: op.photo,
+          })
+        } else {
+          await this.skipWalk(op.date, op.slotTemplateId)
+        }
+      } catch (e) {
+        if (isNetworkError(e)) {
+          // Toujours hors-ligne : on remet l'opération en file.
+          this.writeQueue([...this.readQueue(), op])
+        }
+      }
+    }
+    this.scheduleReload()
+  }
+
+  /** Applique une opération au snapshot en cache (retour visuel hors-ligne). */
+  private applyToCache(op: QueuedWalkOp): void {
+    const cache = this.readCache()
+    if (!cache || !this.session || cache.session.householdId !== this.session.householdId) return
+    let slot = cache.snap.walkSlots.find(
+      (w) => w.date === op.date && w.slotTemplateId === op.slotTemplateId,
+    )
+    if (!slot) {
+      slot = {
+        id: `offline-${op.date}-${op.slotTemplateId}`,
+        petId: cache.snap.pet.id,
+        date: op.date,
+        slotTemplateId: op.slotTemplateId,
+        status: 'pending',
+      }
+      cache.snap.walkSlots.push(slot)
+    }
+    slot.status = op.kind === 'validate' ? 'done' : 'skipped'
+    slot.validatedBy = this.session.memberId
+    slot.validatedAt = new Date().toISOString()
+    if (op.note) slot.note = op.note
+    if (op.photo) slot.photo = op.photo
+    this.writeCache(cache.session, cache.snap)
+    this.scheduleReload()
+  }
+
+  /** Prévient la fonction edge `notify` (push immédiats) — sans bloquer l'UI. */
+  private notifyServer(payload: Record<string, unknown>): void {
+    void this.client.functions.invoke('notify', { body: payload }).catch(() => {
+      // Les push retomberont sur le cron `reminders` si l'appel échoue.
+    })
   }
 
   // --- Session ---------------------------------------------------------------
@@ -168,16 +289,26 @@ export class SupabaseProvider implements DataProvider {
   async getSession(): Promise<Session | null> {
     const { data } = await this.client.auth.getSession()
     if (!data.session) return null
-    const { data: rows, error } = await this.client
-      .from('members')
-      .select('id, household_id')
-      .eq('user_id', data.session.user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-    fail(error)
-    if (!rows || rows.length === 0) return null
-    this.session = { householdId: rows[0].household_id, memberId: rows[0].id }
-    this.openRealtime(this.session.householdId)
+    try {
+      const { data: rows, error } = await this.client
+        .from('members')
+        .select('id, household_id')
+        .eq('user_id', data.session.user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+      fail(error)
+      if (!rows || rows.length === 0) return null
+      this.session = { householdId: rows[0].household_id, memberId: rows[0].id }
+    } catch (e) {
+      // Hors-ligne avec une session connue : on repart du cache local.
+      const cache = this.readCache()
+      if (isNetworkError(e) && cache) {
+        this.session = cache.session
+      } else {
+        throw e
+      }
+    }
+    this.openRealtime(this.session!.householdId)
     return this.session
   }
 
@@ -209,7 +340,7 @@ export class SupabaseProvider implements DataProvider {
     if (error) {
       throw new Error(
         error.message.includes('invite_not_found')
-          ? 'Code d’invitation introuvable. Vérifiez-le auprès du propriétaire.'
+          ? 'Code d’invitation introuvable. Vérifie-le auprès du propriétaire.'
           : error.message,
       )
     }
@@ -296,6 +427,20 @@ export class SupabaseProvider implements DataProvider {
 
   async load(): Promise<AppSnapshot> {
     const session = this.requireSession()
+    try {
+      const snap = await this.loadRemote(session)
+      this.writeCache(session, snap)
+      return snap
+    } catch (e) {
+      const cache = this.readCache()
+      if (isNetworkError(e) && cache && cache.session.householdId === session.householdId) {
+        return cache.snap
+      }
+      throw e
+    }
+  }
+
+  private async loadRemote(session: Session): Promise<AppSnapshot> {
     const hh = session.householdId
 
     const [households, members, pets] = await Promise.all([
@@ -376,13 +521,24 @@ export class SupabaseProvider implements DataProvider {
 
   async validateWalk(input: ValidateWalkInput): Promise<void> {
     const session = this.requireSession()
-    await this.upsertSlot(input.date, input.slotTemplateId, {
-      status: 'done',
-      validated_by: session.memberId,
-      validated_at: new Date().toISOString(),
-      ...(input.note ? { note: input.note } : {}),
-      ...(input.photo ? { photo: input.photo } : {}),
-    })
+    try {
+      await this.upsertSlot(input.date, input.slotTemplateId, {
+        status: 'done',
+        validated_by: session.memberId,
+        validated_at: new Date().toISOString(),
+        ...(input.note ? { note: input.note } : {}),
+        ...(input.photo ? { photo: input.photo } : {}),
+      })
+    } catch (e) {
+      if (!isNetworkError(e)) throw e
+      // Hors-ligne : on met la validation en file et on l'affiche localement.
+      this.writeQueue([
+        ...this.readQueue(),
+        { kind: 'validate', date: input.date, slotTemplateId: input.slotTemplateId, note: input.note, photo: input.photo },
+      ])
+      this.applyToCache({ kind: 'validate', date: input.date, slotTemplateId: input.slotTemplateId, note: input.note, photo: input.photo })
+      return
+    }
     // Message système dans le fil (avec la photo éventuelle).
     const { data: tpl } = await this.client
       .from('slot_templates')
@@ -392,11 +548,10 @@ export class SupabaseProvider implements DataProvider {
       .from('members')
       .select('name')
       .eq('id', session.memberId)
-    const label = tpl?.[0] ? `${tpl[0].name.toLowerCase()} ${tpl[0].emoji}` : ''
     const { error } = await this.client.from('messages').insert({
       household_id: session.householdId,
       kind: 'system',
-      text: `${me?.[0]?.name ?? 'Quelqu’un'} a validé la promenade ${label} ✅`,
+      text: `${me?.[0]?.name ?? 'Quelqu’un'} a validé la promenade ${slotName(tpl?.[0])} ✅`,
       photo: input.photo ?? null,
       ref_date: input.date,
       ref_slot_template_id: input.slotTemplateId,
@@ -415,11 +570,17 @@ export class SupabaseProvider implements DataProvider {
 
   async skipWalk(date: DateStr, slotTemplateId: string): Promise<void> {
     const session = this.requireSession()
-    await this.upsertSlot(date, slotTemplateId, {
-      status: 'skipped',
-      validated_by: session.memberId,
-      validated_at: new Date().toISOString(),
-    })
+    try {
+      await this.upsertSlot(date, slotTemplateId, {
+        status: 'skipped',
+        validated_by: session.memberId,
+        validated_at: new Date().toISOString(),
+      })
+    } catch (e) {
+      if (!isNetworkError(e)) throw e
+      this.writeQueue([...this.readQueue(), { kind: 'skip', date, slotTemplateId }])
+      this.applyToCache({ kind: 'skip', date, slotTemplateId })
+    }
   }
 
   async attachToWalk(
@@ -457,7 +618,10 @@ export class SupabaseProvider implements DataProvider {
   async duplicateWeek(fromMonday: DateStr, toMonday: DateStr): Promise<number> {
     const { duplicateWeekAssignments } = await import('../domain/logic')
     const snapshot = await this.load()
-    const assignments = duplicateWeekAssignments(snapshot.walkSlots, fromMonday, toMonday)
+    const valid = new Set(snapshot.slotTemplates.map((t) => t.id))
+    const assignments = duplicateWeekAssignments(snapshot.walkSlots, fromMonday, toMonday).filter(
+      (a) => valid.has(a.slotTemplateId),
+    )
     if (assignments.length > 0) await this.assignWalks(assignments)
     return assignments.length
   }
@@ -481,7 +645,10 @@ export class SupabaseProvider implements DataProvider {
     const { applyWeekTemplate } = await import('../domain/logic')
     const snapshot = await this.load()
     if (!snapshot.weekTemplate) throw new Error('Aucune semaine type enregistrée pour le moment.')
-    const assignments = applyWeekTemplate(snapshot.weekTemplate, monday)
+    const valid = new Set(snapshot.slotTemplates.map((t) => t.id))
+    const assignments = applyWeekTemplate(snapshot.weekTemplate, monday).filter((a) =>
+      valid.has(a.slotTemplateId),
+    )
     if (assignments.length > 0) await this.assignWalks(assignments)
     return assignments.length
   }
@@ -514,7 +681,14 @@ export class SupabaseProvider implements DataProvider {
       end_at: period.endAt,
     }
     const { error } = await this.client.from('care_periods').upsert(row)
-    fail(error)
+    if (error) {
+      // Contrainte d'exclusion en base : deux appareils simultanés.
+      throw new Error(
+        /care_periods_no_overlap|exclusion/i.test(error.message)
+          ? 'Cette période chevauche une garde déjà enregistrée.'
+          : error.message,
+      )
+    }
     if (!period.id) {
       const { formatInstant } = await import('../lib/dates')
       const name = snapshot.members.find((m) => m.id === period.memberId)?.name ?? 'Quelqu’un'
@@ -547,19 +721,28 @@ export class SupabaseProvider implements DataProvider {
       ref_slot_template_id: input.refSlotTemplateId ?? null,
     })
     fail(error)
+    // Push « nouveau message » aux membres qui l'ont activé.
+    this.notifyServer({
+      type: 'message-sent',
+      householdId: session.householdId,
+      authorMemberId: session.memberId,
+      preview: input.text.slice(0, 90) || '📷 Photo',
+    })
     this.broadcast()
   }
 
   // --- Remplacements -----------------------------------------------------------------
 
   async createSwapRequest(input: CreateSwapInput): Promise<void> {
-    const { error } = await this.client.rpc('create_swap_request', {
+    const { data, error } = await this.client.rpc('create_swap_request', {
       p_walk_slot_date: input.walkSlotDate ?? null,
       p_walk_slot_template_id: input.walkSlotTemplateId ?? null,
       p_care_period_id: input.carePeriodId ?? null,
       p_message: input.message ?? null,
     })
     fail(error)
+    // Push immédiat vers la première cible de la cascade.
+    if (data?.swap_id) this.notifyServer({ type: 'swap-created', swapId: data.swap_id })
     this.broadcast()
   }
 
@@ -569,6 +752,8 @@ export class SupabaseProvider implements DataProvider {
       p_accept: accept,
     })
     fail(error)
+    // accepté → push au demandeur ; refusé → push à la nouvelle cible (ou SOS).
+    this.notifyServer({ type: accept ? 'swap-accepted' : 'swap-advanced', swapId })
     this.broadcast()
   }
 
@@ -587,11 +772,12 @@ export class SupabaseProvider implements DataProvider {
   async updatePet(patch: Partial<Omit<Pet, 'id' | 'householdId'>>): Promise<void> {
     const petId = await this.requirePetId()
     const row: Row = {}
-    if (patch.name !== undefined) row.name = patch.name
-    if (patch.photo !== undefined) row.photo = patch.photo
-    if (patch.breed !== undefined) row.breed = patch.breed
-    if (patch.birthDate !== undefined) row.birth_date = patch.birthDate
-    if (patch.notes !== undefined) row.notes = patch.notes
+    // La présence de la clé fait foi : `undefined` efface la valeur (→ null).
+    if ('name' in patch && patch.name) row.name = patch.name
+    if ('photo' in patch) row.photo = patch.photo ?? null
+    if ('breed' in patch) row.breed = patch.breed ?? null
+    if ('birthDate' in patch) row.birth_date = patch.birthDate ?? null
+    if ('notes' in patch) row.notes = patch.notes ?? null
     const { error } = await this.client.from('pets').update(row).eq('id', petId)
     fail(error)
     this.broadcast()
@@ -641,8 +827,24 @@ export class SupabaseProvider implements DataProvider {
 
   async deleteSlotTemplate(id: string): Promise<void> {
     await this.client.from('walk_slots').delete().eq('slot_template_id', id).eq('status', 'pending')
-    const { error } = await this.client.from('slot_templates').delete().eq('id', id)
-    fail(error)
+    // Des promenades validées existent ? On désactive le créneau au lieu de le
+    // supprimer, pour préserver l'historique et la galerie (promesse de l'UI).
+    const { data: remaining, error: countError } = await this.client
+      .from('walk_slots')
+      .select('id')
+      .eq('slot_template_id', id)
+      .limit(1)
+    fail(countError)
+    if (remaining && remaining.length > 0) {
+      const { error } = await this.client
+        .from('slot_templates')
+        .update({ active: false })
+        .eq('id', id)
+      fail(error)
+    } else {
+      const { error } = await this.client.from('slot_templates').delete().eq('id', id)
+      fail(error)
+    }
     this.broadcast()
   }
 
@@ -655,11 +857,26 @@ export class SupabaseProvider implements DataProvider {
     if (patch.swaps !== undefined) row.swaps = patch.swaps
     if (patch.chat !== undefined) row.chat = patch.chat
     if (patch.leadMinutes !== undefined) row.lead_minutes = patch.leadMinutes
-    if (patch.quietStart !== undefined) row.quiet_start = patch.quietStart || null
-    if (patch.quietEnd !== undefined) row.quiet_end = patch.quietEnd || null
+    // Clé présente + valeur vide/undefined = effacement (→ null).
+    if ('quietStart' in patch) row.quiet_start = patch.quietStart || null
+    if ('quietEnd' in patch) row.quiet_end = patch.quietEnd || null
     const { error } = await this.client
       .from('notification_prefs')
       .upsert(row, { onConflict: 'member_id' })
+    fail(error)
+    this.broadcast()
+  }
+
+  async updateHousehold(patch: { swapEscalateMinutes?: number }): Promise<void> {
+    const session = this.requireSession()
+    const row: Row = {}
+    if (patch.swapEscalateMinutes !== undefined) {
+      row.swap_escalate_minutes = patch.swapEscalateMinutes
+    }
+    const { error } = await this.client
+      .from('households')
+      .update(row)
+      .eq('id', session.householdId)
     fail(error)
     this.broadcast()
   }

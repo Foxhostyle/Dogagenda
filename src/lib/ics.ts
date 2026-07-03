@@ -77,3 +77,27 @@ export function buildMemberIcs(snap: AppSnapshot, memberId: string, now: Date = 
   lines.push('END:VCALENDAR')
   return lines.join('\r\n') + '\r\n'
 }
+
+/** Fichier .ics d'un seul événement (« ajouter cet événement à mon agenda »). */
+export function buildSingleEventIcs(
+  id: string,
+  start: Date,
+  end: Date,
+  summary: string,
+  now: Date = new Date(),
+): string {
+  return [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Dogagenda//Dogagenda//FR',
+    'CALSCALE:GREGORIAN',
+    'BEGIN:VEVENT',
+    `UID:${id}@dogagenda`,
+    `DTSTAMP:${formatIcsDate(now)}`,
+    `DTSTART:${formatIcsDate(start)}`,
+    `DTEND:${formatIcsDate(end)}`,
+    `SUMMARY:${escapeIcsText(summary)}`,
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n') + '\r\n'
+}

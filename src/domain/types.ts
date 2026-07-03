@@ -19,6 +19,8 @@ export interface Household {
   id: string
   name: string
   inviteCode: string
+  /** Minutes sans réponse avant de passer au suivant de la cascade (défaut 30). */
+  swapEscalateMinutes?: number
   createdAt: string
 }
 

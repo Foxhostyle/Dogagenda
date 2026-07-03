@@ -114,6 +114,8 @@ export interface DataProvider {
   upsertSlotTemplate(template: Omit<SlotTemplate, 'householdId'>): Promise<void>
   deleteSlotTemplate(id: string): Promise<void>
   updatePrefs(patch: Partial<Omit<NotificationPrefs, 'memberId'>>): Promise<void>
+  /** Réglages du foyer (propriétaire) : ex. délai avant escalade de la cascade. */
+  updateHousehold(patch: { swapEscalateMinutes?: number }): Promise<void>
 
   // --- Photos -----------------------------------------------------------------
   /** Stocke une photo (compressée en amont) et retourne sa référence. */

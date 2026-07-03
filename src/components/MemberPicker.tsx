@@ -48,7 +48,7 @@ export default function MemberPicker({
           <button
             type="button"
             onClick={() => onPick(null)}
-            className="flex items-center gap-3 rounded-2xl border-2 border-dashed border-bark-200 p-3 text-left font-bold text-bark-500 active:bg-bark-50 dark:border-night-800"
+            className="flex items-center gap-3 rounded-2xl border-2 border-dashed border-bark-200 p-3 text-left font-bold text-bark-500 active:bg-bark-50 dark:border-night-800 dark:active:bg-night-800"
           >
             <span className="flex size-10 items-center justify-center rounded-full bg-bark-100 text-lg dark:bg-night-800">
               ∅

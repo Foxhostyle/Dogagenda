@@ -61,6 +61,7 @@ export default function PetScreen() {
       <SlotsSection snap={snap} isOwner={isOwner} />
       <PrefsSection snap={snap} me={me} />
       <CalendarSection snap={snap} me={me} />
+      <InstallCard />
       {provider.mode === 'demo' && <DemoTools snap={snap} me={me} />}
       <LeaveSection petName={snap.pet.name} />
     </div>
@@ -371,8 +372,38 @@ function FamilySection({
       </Card>
       {isOwner && (
         <p className="mt-2 px-2 text-xs text-bark-500 dark:text-bark-400">
-          L’ordre définit qui est prévenu en premier lors d’une demande de remplacement.
+          L’ordre définit qui est prévenu·e en premier lors d’une demande de remplacement.
         </p>
+      )}
+      {isOwner && (
+        <Card className="mt-3">
+          <p className="text-sm font-extrabold">⏱️ Délai avant de solliciter le suivant</p>
+          <p className="mt-1 text-xs text-bark-500 dark:text-bark-400">
+            Sans réponse à une demande de remplacement après ce délai, la personne suivante de la
+            liste est prévenue automatiquement.
+          </p>
+          <div className="mt-2 flex gap-1 rounded-2xl bg-bark-100 p-1 dark:bg-night-800">
+            {[15, 30, 60].map((min) => (
+              <button
+                key={min}
+                type="button"
+                onClick={() =>
+                  void tryAction(async () => {
+                    await provider.updateHousehold({ swapEscalateMinutes: min })
+                  })
+                }
+                className={cx(
+                  'flex-1 rounded-xl py-2 text-xs font-bold transition-colors',
+                  (snap.household.swapEscalateMinutes ?? 30) === min
+                    ? 'bg-white text-bark-900 shadow-sm dark:bg-night-850 dark:text-cream'
+                    : 'text-bark-500 dark:text-bark-400',
+                )}
+              >
+                {min} min
+              </button>
+            ))}
+          </div>
+        </Card>
       )}
       {removeTarget && (
         <Sheet open onClose={() => setRemoveTarget(null)} title={`Retirer ${removeTarget.name} ?`}>
@@ -761,9 +792,21 @@ function CalendarSection({ snap, me }: { snap: AppSnapshot; me: Member }) {
           <CalendarDays className="size-5" aria-hidden /> Télécharger mon calendrier (.ics)
         </Button>
         {feedUrl && (
+          <a
+            href="https://calendar.google.com/calendar/u/0/r/settings/addbyurl"
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-sage-100 text-base font-bold text-sage-800 active:bg-sage-200 dark:bg-sage-900/60 dark:text-sage-200"
+          >
+            <CalendarDays className="size-5" aria-hidden /> Ajouter à Google Calendar
+          </a>
+        )}
+        {feedUrl && (
           <div className="mt-3">
             <p className="text-xs text-bark-500 dark:text-bark-400">
-              Abonne-toi à cette adresse pour une mise à jour automatique.
+              Copie cette adresse, puis colle-la dans Google Calendar (« Ajouter un agenda » →
+              « À partir de l’URL », bouton ci-dessus) ou dans Apple Calendrier (« Nouvel abonnement
+              à un calendrier »). Tes gardes et promenades se mettront à jour automatiquement.
             </p>
             <button
               type="button"
@@ -833,6 +876,54 @@ function DemoTools({ snap, me }: { snap: AppSnapshot; me: Member }) {
           })
         }}
       />
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Installation sur l'écran d'accueil
+// ---------------------------------------------------------------------------
+
+function InstallCard() {
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const standalone =
+    typeof window !== 'undefined' &&
+    (window.matchMedia('(display-mode: standalone)').matches ||
+      (navigator as { standalone?: boolean }).standalone === true)
+  if (standalone) return null
+
+  return (
+    <>
+      <SectionTitle>Installation</SectionTitle>
+      <Card>
+        <p className="text-sm text-bark-600 dark:text-bark-400">
+          Installe Dogagenda sur ton écran d’accueil : l’app s’ouvre en plein écran, comme une
+          vraie application — sans passer par un store.
+        </p>
+        <Button variant="soft" fullWidth className="mt-3" onClick={() => setSheetOpen(true)}>
+          📲 Comment installer ?
+        </Button>
+      </Card>
+      <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="Ajouter à l’écran d’accueil 📲">
+        <div className="flex flex-col gap-4 text-sm text-bark-700 dark:text-bark-300">
+          <div>
+            <p className="font-extrabold"> Sur iPhone / iPad (Safari)</p>
+            <ol className="mt-1 list-decimal space-y-1 pl-5">
+              <li>Touche le bouton Partager (le carré avec une flèche).</li>
+              <li>Fais défiler et choisis « Sur l’écran d’accueil ».</li>
+              <li>Confirme avec « Ajouter » — c’est tout !</li>
+            </ol>
+          </div>
+          <div>
+            <p className="font-extrabold">🤖 Sur Android (Chrome)</p>
+            <ol className="mt-1 list-decimal space-y-1 pl-5">
+              <li>Ouvre le menu ⋮ en haut à droite.</li>
+              <li>Choisis « Installer l’application » (ou « Ajouter à l’écran d’accueil »).</li>
+              <li>Confirme — l’icône 🐾 apparaît sur ton écran d’accueil.</li>
+            </ol>
+          </div>
+        </div>
+      </Sheet>
     </>
   )
 }

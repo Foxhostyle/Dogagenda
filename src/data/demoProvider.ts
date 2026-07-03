@@ -296,6 +296,14 @@ export class DemoProvider implements DataProvider {
     return db.members.find((m) => m.id === memberId)?.name ?? 'Quelqu’un'
   }
 
+  /** « du matin 🌅 » / « de l’après-midi ☀️ » — article français correct. */
+  private slotName(template: { name: string; emoji: string } | undefined): string {
+    if (!template) return ''
+    const lower = template.name.toLowerCase()
+    const article = /^[aeéèiouyh]/.test(lower) ? 'de l’' : 'du '
+    return `${article}${lower} ${template.emoji}`
+  }
+
   private slotLabel(db: DemoDb, slotTemplateId: string, date: DateStr): string {
     const t = db.slotTemplates.find((s) => s.id === slotTemplateId)
     const name = t ? `${t.name.toLowerCase()} ${t.emoji}` : 'promenade'
@@ -346,7 +354,7 @@ export class DemoProvider implements DataProvider {
     this.pushSystemMessage(
       db,
       session.householdId,
-      `${this.memberName(db, session.memberId)} a validé la promenade ${template ? `${template.name.toLowerCase()} ${template.emoji}` : ''} ✅`,
+      `${this.memberName(db, session.memberId)} a validé la promenade ${this.slotName(template)} ✅`,
       { photo: input.photo, refDate: input.date, refSlotTemplateId: input.slotTemplateId },
     )
     this.writeDb(db)
@@ -415,12 +423,22 @@ export class DemoProvider implements DataProvider {
     this.writeDb(db)
   }
 
+  /** Créneaux encore existants du foyer — filtre les affectations orphelines. */
+  private validTemplateIds(db: DemoDb, householdId: string): Set<string> {
+    return new Set(
+      db.slotTemplates.filter((t) => t.householdId === householdId).map((t) => t.id),
+    )
+  }
+
   async duplicateWeek(fromMonday: DateStr, toMonday: DateStr): Promise<number> {
     const session = this.requireSession()
     const db = this.readDb()
     const pet = this.pet(db, session.householdId)
     const slots = db.walkSlots.filter((w) => w.petId === pet.id)
-    const assignments = duplicateWeekAssignments(slots, fromMonday, toMonday)
+    const valid = this.validTemplateIds(db, session.householdId)
+    const assignments = duplicateWeekAssignments(slots, fromMonday, toMonday).filter((a) =>
+      valid.has(a.slotTemplateId),
+    )
     for (const a of assignments) {
       const slot = this.upsertSlot(db, pet.id, a.date, a.slotTemplateId)
       slot.assignedMemberId = a.memberId
@@ -446,7 +464,10 @@ export class DemoProvider implements DataProvider {
     const template = db.weekTemplates.find((t) => t.householdId === session.householdId)
     if (!template) throw new Error('Aucune semaine type enregistrée pour le moment.')
     const pet = this.pet(db, session.householdId)
-    const assignments = applyTemplateAssignments(template, monday)
+    const valid = this.validTemplateIds(db, session.householdId)
+    const assignments = applyTemplateAssignments(template, monday).filter((a) =>
+      valid.has(a.slotTemplateId),
+    )
     for (const a of assignments) {
       const slot = this.upsertSlot(db, pet.id, a.date, a.slotTemplateId)
       slot.assignedMemberId = a.memberId
@@ -582,12 +603,12 @@ export class DemoProvider implements DataProvider {
       return
     }
 
-    // Refus : on marque le maillon courant puis on fait avancer la cascade.
+    // Refus : uniquement si l'appelant est bien la cible courante — sinon
+    // (double tap, bannière périmée après escalade) on ignorerait un membre.
     const last = swap.cascade[swap.cascade.length - 1]
-    if (last && !last.response && last.memberId === session.memberId) {
-      last.response = 'declined'
-      last.respondedAt = now
-    }
+    if (!last || last.response || last.memberId !== session.memberId) return
+    last.response = 'declined'
+    last.respondedAt = now
     const members = db.members.filter((m) => m.householdId === session.householdId)
     const next = nextCascadeTarget(members, swap.requesterId, swap.cascade)
     if (next) {
@@ -690,12 +711,20 @@ export class DemoProvider implements DataProvider {
   async deleteSlotTemplate(id: string): Promise<void> {
     const session = this.requireSession()
     const db = this.readDb()
-    db.slotTemplates = db.slotTemplates.filter(
-      (t) => !(t.id === id && t.householdId === session.householdId),
-    )
-    // Les promenades passées (validées) restent pour l'historique et la galerie ;
-    // les lignes en attente n'ont plus de sens sans créneau.
+    // Les lignes en attente n'ont plus de sens sans créneau…
     db.walkSlots = db.walkSlots.filter((w) => !(w.slotTemplateId === id && w.status === 'pending'))
+    // …mais les promenades validées restent pour l'historique et la galerie :
+    // si le créneau en a, on le désactive au lieu de le supprimer.
+    const hasHistory = db.walkSlots.some((w) => w.slotTemplateId === id)
+    const template = db.slotTemplates.find(
+      (t) => t.id === id && t.householdId === session.householdId,
+    )
+    if (template && hasHistory) template.active = false
+    else {
+      db.slotTemplates = db.slotTemplates.filter(
+        (t) => !(t.id === id && t.householdId === session.householdId),
+      )
+    }
     this.writeDb(db)
   }
 
@@ -712,6 +741,16 @@ export class DemoProvider implements DataProvider {
   }
 
   // --- Photos ------------------------------------------------------------------
+
+  async updateHousehold(patch: { swapEscalateMinutes?: number }): Promise<void> {
+    const session = this.requireSession()
+    const db = this.readDb()
+    const household = db.households.find((h) => h.id === session.householdId)
+    if (household && patch.swapEscalateMinutes !== undefined) {
+      household.swapEscalateMinutes = patch.swapEscalateMinutes
+    }
+    this.writeDb(db)
+  }
 
   async savePhoto(blob: Blob): Promise<PhotoRef> {
     return storeLocalPhoto(blob)

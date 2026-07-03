@@ -81,13 +81,20 @@ supabase secrets set APP_TZ="Europe/Paris"
 
 ```bash
 supabase functions deploy reminders
+supabase functions deploy notify
 supabase functions deploy ics --no-verify-jwt
 ```
 
-- `reminders` : envoie les notifications push (rappels de créneau, créneaux
-  manqués, rappels de garde, escalade des remplacements). Elle reste protégée
-  par JWT : seul l’appel planifié avec la clé `service_role` (étape 6) peut la
-  déclencher.
+- `reminders` : filet de sécurité et chronomètre — rappels de créneau, créneaux
+  manqués, rappels de garde, et **escalade** des remplacements (le délai, réglable
+  par le propriétaire dans l’app, court à partir du moment où la cible a réellement
+  reçu sa notification). Elle reste protégée par JWT : seul l’appel planifié avec
+  la clé `service_role` (étape 6) peut la déclencher.
+- `notify` : push **immédiats**, appelée par l’application juste après une action —
+  nouvelle demande de remplacement (première cible de la cascade, avec boutons
+  Accepter/Refuser dans la notification), refus (cible suivante), acceptation
+  (le demandeur), liste épuisée (tout le foyer), et nouveaux messages de la
+  discussion. L’appelant doit être un membre authentifié du foyer.
 - `ics` : sert le flux iCal personnel de chaque membre. Le
   `--no-verify-jwt` est **indispensable** : Google Calendar appelle l’URL sans
   en-tête d’autorisation — la sécurité repose sur le jeton secret de chaque

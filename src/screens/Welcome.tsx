@@ -22,7 +22,7 @@ export default function Welcome() {
         </span>
         <h1 className="text-3xl font-black tracking-tight">Dogagenda</h1>
         <p className="text-bark-600 dark:text-bark-400">
-          Les promenades et la garde de votre chien,
+          Les promenades et la garde de ton chien,
           <br />
           coordonnées en famille.
         </p>
