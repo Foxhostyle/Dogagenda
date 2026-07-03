@@ -64,6 +64,7 @@ Plusieurs membres d'une même famille se relaient pour garder Wint et le promene
 
 ### 5. Profil de Wint & réglages
 - Photo, nom, race, âge, notes libres (véto, particularités).
+- **Galerie photos de Wint** : un onglet qui regroupe automatiquement toutes les photos déjà postées dans l'app (validations de promenades et discussion), en grille chronologique, avec plein écran au tap. Aucune fonction d'upload dédiée — c'est une vue sur l'existant.
 - Liste des membres du foyer, code d'invitation à partager (bouton copier + partage natif `navigator.share`).
 - **Réglages du propriétaire** : définir les **créneaux de promenade** du foyer (nom + heures de début/fin, ajout/suppression), et l'**ordre de priorité des intervenants** pour la cascade de notifications (glisser-déposer), ainsi que le délai avant escalade.
 - **Réglages personnels de chaque membre** : personnaliser ses rappels — activer/désactiver chaque type de notification, délai d'anticipation ("préviens-moi 30 min avant mon créneau"), heures de silence.
@@ -88,6 +89,19 @@ Chaque membre contrôle ses notifications via ses préférences personnelles (ty
 - Barre d'onglets en bas : **Aujourd'hui · Planning · Discussion · Wint**.
 - Textes de l'interface **en français**, ton léger et familial ("Wint a été promené !", "À qui le tour ?").
 - États vides soignés (première ouverture, semaine non planifiée) qui guident l'utilisateur vers l'action.
+
+## Roadmap v2 (ne pas implémenter, mais concevoir l'architecture pour les accueillir)
+
+Ces fonctionnalités sont validées pour une version ultérieure. Ne les construis pas maintenant, mais fais des choix de modèle de données et de structure qui ne les rendront pas coûteuses plus tard :
+
+1. **Bouton urgence + fiche "SOS Wint"** : notification immédiate à tout le foyer (contournant les heures de silence) + fiche d'urgence (véto, véto de garde, numéro de puce, allergies, poids).
+2. **Journal santé express** : à la validation d'une promenade, trois émojis optionnels (💩 besoins faits, 🍽️ a mangé, ⚠️ comportement inhabituel) + frise "dernière fois que Wint a…".
+3. **Mode "promenade en cours"** optionnel : "Je pars promener Wint" visible par tous en temps réel, durée calculée automatiquement au retour.
+4. **Accès invité dog-sitter** : lien d'accès à durée limitée (dates de début/fin), droits restreints (planning de la période, fiche pratique, chat, validation), expiration automatique — le modèle de rôles doit le prévoir.
+5. **Rappels de soins récurrents** : vermifuge, anti-puces, vaccins — échéances récurrentes espacées avec notification et validation "fait par X le Y".
+6. **Alertes santé météo** sur les créneaux concernés (canicule → trottoir brûlant, verglas), pas de widget météo décoratif.
+7. **Récap mensuel festif** posté dans la discussion (total de promenades du foyer, photo la plus aimée) — sans classement individuel.
+8. **Repas & médicaments quotidiens**, **checklist de passation de garde**, **notes vocales dans le chat**, **multi-animaux** (le modèle `pets` le permet déjà).
 
 ## Qualité et critères d'acceptation
 
