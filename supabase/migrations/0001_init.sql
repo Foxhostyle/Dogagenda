@@ -433,8 +433,8 @@ begin
   -- Les trois créneaux par défaut, entièrement modifiables ensuite.
   insert into slot_templates (household_id, name, emoji, start_time, end_time, sort_order, active)
   values
-    (v_household, 'Matin', '🌅', '07:00', '09:30', 0, true),
-    (v_household, 'Après-midi', '☀️', '14:00', '17:00', 1, true),
+    (v_household, 'Matin', '☀️', '07:00', '09:30', 0, true),
+    (v_household, 'Après-midi', '⛅', '14:00', '17:00', 1, true),
     (v_household, 'Soir', '🌙', '19:00', '21:30', 2, true);
 
   insert into notification_prefs (member_id) values (v_member);

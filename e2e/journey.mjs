@@ -108,7 +108,7 @@ await page.getByRole('button', { name: /Dupliquer la semaine précédente/ }).cl
 await settle()
 check(await page.getByText(/créneaux copiés|créneau copié/).isVisible(), 'Duplication confirmée (toast)')
 // Assignation par lot : premier chip → « Toute la semaine » → Mamie Jo
-await page.locator('button:has-text("🌅")').first().click()
+await page.locator('button:has-text("☀️")').first().click()
 await settle()
 check(await page.getByText(/Qui promène Wint/).isVisible(), 'MemberPicker du planning ouvert')
 await page.getByRole('button', { name: 'Toute la semaine' }).click()

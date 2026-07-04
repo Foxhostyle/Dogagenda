@@ -64,8 +64,8 @@ export function buildDemoSeed(now: Date = new Date()): SeedDb {
   }
 
   const slotTemplates: SlotTemplate[] = [
-    { id: 'st-matin', householdId: hh, name: 'Matin', emoji: '🌅', startTime: '07:00', endTime: '09:30', sortOrder: 0, active: true },
-    { id: 'st-aprem', householdId: hh, name: 'Après-midi', emoji: '☀️', startTime: '14:00', endTime: '17:00', sortOrder: 1, active: true },
+    { id: 'st-matin', householdId: hh, name: 'Matin', emoji: '☀️', startTime: '07:00', endTime: '09:30', sortOrder: 0, active: true },
+    { id: 'st-aprem', householdId: hh, name: 'Après-midi', emoji: '⛅', startTime: '14:00', endTime: '17:00', sortOrder: 1, active: true },
     { id: 'st-soir', householdId: hh, name: 'Soir', emoji: '🌙', startTime: '19:00', endTime: '21:30', sortOrder: 2, active: true },
   ]
 
@@ -129,7 +129,7 @@ export function buildDemoSeed(now: Date = new Date()): SeedDb {
     },
     {
       id: 'msg-4', householdId: hh, kind: 'system',
-      text: 'Léa a validé la promenade du matin 🌅 ✅',
+      text: 'Léa a validé la promenade du matin ☀️ ✅',
       refDate: today, refSlotTemplateId: 'st-matin',
       createdAt: iso(atTime(today, '08:20')),
     },

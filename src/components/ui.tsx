@@ -226,10 +226,12 @@ export function Toggle({
         checked ? 'bg-sage-600' : 'bg-bark-300 dark:bg-night-800',
       )}
     >
+      {/* Position et déplacement en rem : reste aligné même quand l'utilisateur
+          agrandit la taille de police du téléphone (accessibilité Android). */}
       <span
         className={cx(
-          'absolute top-0.5 size-6 rounded-full bg-white shadow transition-transform',
-          checked ? 'translate-x-[22px]' : 'translate-x-0.5',
+          'absolute top-0.5 left-0.5 size-6 rounded-full bg-white shadow transition-transform',
+          checked ? 'translate-x-5' : 'translate-x-0',
         )}
       />
     </button>

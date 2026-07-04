@@ -539,7 +539,7 @@ function InviteCard({ snap }: { snap: AppSnapshot }) {
 // Créneaux de promenade
 // ---------------------------------------------------------------------------
 
-const SLOT_EMOJIS = ['🌅', '☀️', '🌇', '🌙', '⭐', '🐾'] as const
+const SLOT_EMOJIS = ['☀️', '⛅', '🌙', '⭐', '🐾', '🦴'] as const
 
 function SlotsSection({ snap, isOwner }: { snap: AppSnapshot; isOwner: boolean }) {
   const [sheet, setSheet] = useState<{ existing?: SlotTemplate } | null>(null)

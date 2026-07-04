@@ -184,8 +184,8 @@ export class DemoProvider implements DataProvider {
       photo: input.petPhoto,
     }
     const defaultTemplates: SlotTemplate[] = [
-      { id: newId(), householdId: household.id, name: 'Matin', emoji: '🌅', startTime: '07:00', endTime: '09:30', sortOrder: 0, active: true },
-      { id: newId(), householdId: household.id, name: 'Après-midi', emoji: '☀️', startTime: '14:00', endTime: '17:00', sortOrder: 1, active: true },
+      { id: newId(), householdId: household.id, name: 'Matin', emoji: '☀️', startTime: '07:00', endTime: '09:30', sortOrder: 0, active: true },
+      { id: newId(), householdId: household.id, name: 'Après-midi', emoji: '⛅', startTime: '14:00', endTime: '17:00', sortOrder: 1, active: true },
       { id: newId(), householdId: household.id, name: 'Soir', emoji: '🌙', startTime: '19:00', endTime: '21:30', sortOrder: 2, active: true },
     ]
     db.households.push(household)

@@ -115,7 +115,7 @@ export default function Chat() {
       )}
 
       {/* Composer, posé juste au-dessus de la barre d’onglets */}
-      <div className="fixed inset-x-0 bottom-[calc(64px+env(safe-area-inset-bottom))] z-30 mx-auto w-full max-w-lg px-4 pb-2">
+      <div className="fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-30 mx-auto w-full max-w-lg px-4 pb-2">
         {refDate && (
           <div className="mb-2 flex items-center gap-2 rounded-2xl bg-sage-100 px-3 py-2 text-xs font-bold text-sage-800 shadow-sm dark:bg-sage-900/80 dark:text-sage-200">
             <span className="flex-1 truncate">
