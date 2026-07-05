@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { Camera, Loader2, Send, X } from 'lucide-react'
 import { EmptyState, Avatar, cx } from '../components/ui'
 import { provider } from '../data'
+import { conversationMessages, type ConversationId } from '../domain/logic'
 import type { AppSnapshot, Member, Message, PhotoRef } from '../domain/types'
 import { formatDayShort, parseIso, relativeDayLabel, toDateStr, type DateStr } from '../lib/dates'
 import { compressImage, usePhotoUrl } from '../lib/photos'
@@ -18,16 +19,26 @@ export default function Chat() {
   const [text, setText] = useState('')
   const [photo, setPhoto] = useState<PhotoRef | undefined>()
   const [photoBusy, setPhotoBusy] = useState(false)
+  /** 'family' = fil du foyer, sinon l'id du membre de la conversation privée. */
+  const [conversation, setConversation] = useState<ConversationId>('family')
   const fileRef = useRef<HTMLInputElement>(null)
   const endRef = useRef<HTMLDivElement>(null)
   const firstScroll = useRef(true)
   const stagedUrl = usePhotoUrl(photo)
 
-  const messageCount = snap?.messages.length ?? 0
+  // Un commentaire de promenade (« Commenter dans la discussion ») vise
+  // toujours le fil familial.
+  const hasRefParams = searchParams.has('date')
+  useEffect(() => {
+    if (hasRefParams) setConversation('family')
+  }, [hasRefParams])
+
+  const visibleCount =
+    snap && me ? conversationMessages(snap.messages, me.id, conversation).length : 0
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: firstScroll.current ? 'auto' : 'smooth' })
     firstScroll.current = false
-  }, [messageCount])
+  }, [visibleCount, conversation])
 
   if (!snap || !me) return null
 
@@ -54,12 +65,14 @@ export default function Chat() {
     const body = text.trim()
     if (!body && !photo) return
     const hadPhoto = Boolean(photo)
+    const isFamily = conversation === 'family'
     void tryAction(async () => {
       await provider.sendMessage({
         text: body,
         ...(photo ? { photo } : {}),
-        ...(refDate ? { refDate } : {}),
-        ...(refDate && refSlotTemplateId ? { refSlotTemplateId } : {}),
+        ...(isFamily ? {} : { recipientId: conversation }),
+        ...(isFamily && refDate ? { refDate } : {}),
+        ...(isFamily && refDate && refSlotTemplateId ? { refSlotTemplateId } : {}),
       })
       setText('')
       setPhoto(undefined)
@@ -68,9 +81,13 @@ export default function Chat() {
     })
   }
 
-  // Groupes de messages par jour (snap.messages est déjà trié par date).
+  const others = snap.members.filter((m) => m.id !== me.id)
+  const partner = conversation === 'family' ? null : memberById(snap, conversation)
+  const visible = conversationMessages(snap.messages, me.id, conversation)
+
+  // Groupes de messages par jour (déjà triés par date).
   const groups: { day: DateStr; items: Message[] }[] = []
-  for (const m of snap.messages) {
+  for (const m of visible) {
     const day = toDateStr(parseIso(m.createdAt))
     const last = groups[groups.length - 1]
     if (last && last.day === day) last.items.push(m)
@@ -82,16 +99,56 @@ export default function Chat() {
       <header className="pt-6 pb-2">
         <h1 className="text-2xl font-black tracking-tight">Discussion</h1>
         <p className="text-sm font-semibold text-bark-500 dark:text-bark-400">
-          Le fil de la famille de {snap.pet.name} 🐾
+          {partner
+            ? `En privé avec ${partner.name} 🤫`
+            : `Le fil de la famille de ${snap.pet.name} 🐾`}
         </p>
       </header>
+
+      {/* Sélecteur de conversation : la famille + chaque membre en privé. */}
+      {others.length > 0 && (
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-2">
+          <button
+            type="button"
+            onClick={() => setConversation('family')}
+            className={cx(
+              'flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-bold transition-colors',
+              conversation === 'family'
+                ? 'bg-sage-600 text-white'
+                : 'bg-white text-bark-600 shadow-sm ring-1 ring-bark-200/60 dark:bg-night-850 dark:text-bark-300 dark:ring-night-800',
+            )}
+          >
+            <span aria-hidden>🐾</span> Famille
+          </button>
+          {others.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => setConversation(m.id)}
+              className={cx(
+                'flex shrink-0 items-center gap-1.5 rounded-full py-1.5 pr-3.5 pl-1.5 text-sm font-bold transition-colors',
+                conversation === m.id
+                  ? 'bg-sage-600 text-white'
+                  : 'bg-white text-bark-600 shadow-sm ring-1 ring-bark-200/60 dark:bg-night-850 dark:text-bark-300 dark:ring-night-800',
+              )}
+            >
+              <Avatar member={m} size="xs" />
+              {m.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {groups.length === 0 ? (
         <div className="pt-6 pb-36">
           <EmptyState
-            emoji="💬"
-            title="Pas encore de messages"
-            text={`Lance la conversation : un petit mot, une photo de ${snap.pet.name}… tout fait plaisir !`}
+            emoji={partner ? '🤫' : '💬'}
+            title={partner ? `Pas encore de messages avec ${partner.name}` : 'Pas encore de messages'}
+            text={
+              partner
+                ? 'Cette conversation reste entre vous deux.'
+                : `Lance la conversation : un petit mot, une photo de ${snap.pet.name}… tout fait plaisir !`
+            }
           />
         </div>
       ) : (
@@ -182,7 +239,7 @@ export default function Chat() {
                 send()
               }
             }}
-            placeholder="Écris un petit mot…"
+            placeholder={partner ? `Écris à ${partner.name}…` : 'Écris un petit mot…'}
             aria-label="Message"
             className="h-10 min-w-0 flex-1 bg-transparent px-1 text-base font-medium placeholder:text-bark-400 focus:outline-none dark:placeholder:text-bark-600"
           />

@@ -96,6 +96,21 @@ await settle(900)
 const chatImgs = await page.locator('img').count()
 check(chatImgs >= 1, 'Photo envoyée dans la discussion')
 await shot('04-discussion')
+// Conversation privée avec Léa
+await page.getByRole('button', { name: 'Léa', exact: true }).click()
+await settle()
+check(await page.getByText(/En privé avec Léa/).isVisible(), 'Conversation privée ouverte')
+check(await page.getByText(/déposer le harnais/).isVisible(), 'Message privé du seed visible')
+await page.getByLabel('Message').fill('Réponse privée E2E 🤫')
+await page.keyboard.press('Enter')
+await settle()
+check(await page.getByText('Réponse privée E2E 🤫').isVisible(), 'Message privé envoyé')
+await page.getByRole('button', { name: 'Famille' }).click()
+await settle()
+check(
+  !(await page.getByText('Réponse privée E2E 🤫').isVisible().catch(() => false)),
+  'Le message privé n’apparaît pas dans le fil familial',
+)
 
 // --- 7. Planning : gardes, duplication, assignation par lot -------------------
 await page.getByRole('link', { name: 'Planning' }).click()

@@ -42,6 +42,11 @@ La migration crée les tables, les politiques RLS (chaque foyer ne voit que ses
 données), les fonctions RPC (création de foyer, cascade de remplacement…), la
 publication Realtime et le bucket de photos.
 
+> **Projet déjà en ligne ?** Appliquez ensuite, dans l’ordre, les migrations
+> suivantes du dossier `supabase/migrations/` (via le SQL Editor) :
+> `0002_direct_messages.sql` — messages privés entre membres. Un projet créé
+> avec le `0001` le plus récent les inclut déjà.
+
 ## 3. Activer les connexions anonymes
 
 Dogagenda n’utilise ni email ni mot de passe : chaque appareil obtient un

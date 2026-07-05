@@ -207,10 +207,13 @@ Deno.serve(async (req) => {
     }
     const { members, prefs } = await loadHousehold(householdId)
     const author = members.find((m) => m.id === body.authorMemberId)
+    // Message privé : seul le destinataire est prévenu.
+    const recipientId = body.recipientId || null
     for (const member of members) {
       if (member.id === body.authorMemberId) continue
+      if (recipientId && member.id !== recipientId) continue
       await push(member, prefs, 'chat', {
-        title: `${author?.name ?? 'Message'} 💬`,
+        title: `${author?.name ?? 'Message'} 💬${recipientId ? ' (privé)' : ''}`,
         body: body.preview || 'Nouveau message',
         tag: 'chat',
         url: '/discussion',

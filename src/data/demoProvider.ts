@@ -525,6 +525,7 @@ export class DemoProvider implements DataProvider {
       id: newId(),
       householdId: session.householdId,
       authorId: session.memberId,
+      recipientId: input.recipientId,
       kind: 'user',
       text: input.text,
       photo: input.photo,

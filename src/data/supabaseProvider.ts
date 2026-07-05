@@ -104,6 +104,7 @@ const mapMessage = (r: Row): Message => ({
   id: r.id,
   householdId: r.household_id,
   authorId: r.author_id ?? undefined,
+  recipientId: r.recipient_id ?? undefined,
   kind: r.kind,
   text: r.text,
   photo: r.photo ?? undefined,
@@ -714,6 +715,7 @@ export class SupabaseProvider implements DataProvider {
     const { error } = await this.client.from('messages').insert({
       household_id: session.householdId,
       author_id: session.memberId,
+      recipient_id: input.recipientId ?? null,
       kind: 'user',
       text: input.text,
       photo: input.photo ?? null,
@@ -721,11 +723,12 @@ export class SupabaseProvider implements DataProvider {
       ref_slot_template_id: input.refSlotTemplateId ?? null,
     })
     fail(error)
-    // Push « nouveau message » aux membres qui l'ont activé.
+    // Push « nouveau message » — au destinataire seul si privé.
     this.notifyServer({
       type: 'message-sent',
       householdId: session.householdId,
       authorMemberId: session.memberId,
+      recipientId: input.recipientId,
       preview: input.text.slice(0, 90) || '📷 Photo',
     })
     this.broadcast()

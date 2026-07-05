@@ -27,6 +27,7 @@ import {
   weekAssignments,
   weekTemplateFromWeek,
   defaultKeeper,
+  conversationMessages,
 } from '../src/domain/logic'
 import { atTime } from '../src/lib/dates'
 import type {
@@ -508,5 +509,28 @@ describe('defaultKeeper', () => {
   })
   it('retourne undefined sans propriétaire', () => {
     expect(defaultKeeper([member('lea', 'member', 0)])).toBeUndefined()
+  })
+})
+
+describe('conversationMessages', () => {
+  const msg = (id: string, authorId: string | undefined, recipientId?: string) => ({
+    id, householdId: 'hh', authorId, recipientId,
+    kind: (authorId ? 'user' : 'system') as 'user' | 'system',
+    text: id, createdAt: '2026-07-01T10:00:00.000Z',
+  })
+  const messages = [
+    msg('fam-1', 'a'),
+    msg('sys-1', undefined),
+    msg('dm-ab', 'a', 'b'),
+    msg('dm-ba', 'b', 'a'),
+    msg('dm-ac', 'a', 'c'),
+  ]
+  it('le fil familial ne contient que les messages sans destinataire', () => {
+    expect(conversationMessages(messages, 'a', 'family').map((m) => m.id)).toEqual(['fam-1', 'sys-1'])
+  })
+  it('une conversation privée ne montre que les échanges entre les deux membres', () => {
+    expect(conversationMessages(messages, 'a', 'b').map((m) => m.id)).toEqual(['dm-ab', 'dm-ba'])
+    expect(conversationMessages(messages, 'b', 'a').map((m) => m.id)).toEqual(['dm-ab', 'dm-ba'])
+    expect(conversationMessages(messages, 'b', 'c').map((m) => m.id)).toEqual([])
   })
 })

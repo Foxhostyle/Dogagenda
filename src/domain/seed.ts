@@ -133,6 +133,12 @@ export function buildDemoSeed(now: Date = new Date()): SeedDb {
       refDate: today, refSlotTemplateId: 'st-matin',
       createdAt: iso(atTime(today, '08:20')),
     },
+    // Un message privé de Léa pour Bastien (visible dans leur conversation).
+    {
+      id: 'msg-5', householdId: hh, authorId: 'm-lea', recipientId: 'm-bastien', kind: 'user',
+      text: 'Coucou ! Tu peux me déposer le harnais de Wint demain ? 🙏',
+      createdAt: iso(atTime(today, '09:30')),
+    },
   ]
 
   // Marco cherche un remplaçant pour demain après-midi ; Bastien (priorité 1)

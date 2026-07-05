@@ -41,6 +41,8 @@ export interface SendMessageInput {
   photo?: PhotoRef
   refDate?: DateStr
   refSlotTemplateId?: string
+  /** Message privé pour ce membre ; absent = discussion familiale. */
+  recipientId?: string
 }
 
 export interface CreateSwapInput {

@@ -100,6 +100,8 @@ export interface Message {
   householdId: string
   /** Absent pour les messages système. */
   authorId?: string
+  /** Destinataire d'un message privé ; absent = discussion familiale. */
+  recipientId?: string
   kind: 'user' | 'system'
   text: string
   photo?: PhotoRef

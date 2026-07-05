@@ -221,6 +221,31 @@ export function exhaustedSwaps(swaps: SwapRequest[]): SwapRequest[] {
 }
 
 // ---------------------------------------------------------------------------
+// Conversations (fil familial + messages privés)
+// ---------------------------------------------------------------------------
+
+/** 'family' = fil du foyer ; sinon l'id du membre de la conversation privée. */
+export type ConversationId = 'family' | (string & {})
+
+/**
+ * Messages visibles dans une conversation : le fil familial regroupe tous les
+ * messages sans destinataire ; une conversation privée ne contient que les
+ * échanges entre `meId` et l'autre membre.
+ */
+export function conversationMessages(
+  messages: Message[],
+  meId: string,
+  conversation: ConversationId,
+): Message[] {
+  if (conversation === 'family') return messages.filter((m) => !m.recipientId)
+  return messages.filter(
+    (m) =>
+      (m.authorId === meId && m.recipientId === conversation) ||
+      (m.authorId === conversation && m.recipientId === meId),
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Galerie
 // ---------------------------------------------------------------------------
 

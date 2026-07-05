@@ -98,6 +98,8 @@ create table public.messages (
   household_id         uuid not null references public.households (id) on delete cascade,
   -- Null pour les messages système, ou si l'auteur a quitté le foyer.
   author_id            uuid references public.members (id) on delete set null,
+  -- Destinataire d'un message privé (null = discussion familiale).
+  recipient_id         uuid references public.members (id) on delete cascade,
   kind                 text not null default 'user' check (kind in ('user', 'system')),
   text                 text not null default '',
   photo                text,
@@ -295,10 +297,26 @@ create policy walk_slots_update on public.walk_slots
 create policy walk_slots_delete on public.walk_slots
   for delete using (is_household_member(pet_household(pet_id)));
 
--- messages : lecture et écriture pour les membres du foyer (les messages
--- système de validation sont insérés directement par le client).
+-- Identifiant du membre correspondant à l'utilisateur connecté dans le foyer.
+create or replace function public.my_member_id(hid uuid)
+returns uuid
+language sql security definer stable set search_path = public
+as $$
+  select id from members where household_id = hid and user_id = auth.uid() limit 1;
+$$;
+
+-- messages : écriture pour les membres du foyer ; lecture limitée au fil
+-- familial (recipient_id null) et aux messages privés dont on est l'auteur
+-- ou le destinataire — la confidentialité est garantie au niveau base.
 create policy messages_select on public.messages
-  for select using (is_household_member(household_id));
+  for select using (
+    is_household_member(household_id)
+    and (
+      recipient_id is null
+      or recipient_id = my_member_id(household_id)
+      or author_id = my_member_id(household_id)
+    )
+  );
 create policy messages_insert on public.messages
   for insert with check (is_household_member(household_id));
 create policy messages_update on public.messages
