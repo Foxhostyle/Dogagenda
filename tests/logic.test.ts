@@ -26,6 +26,7 @@ import {
   validSlotTimes,
   weekAssignments,
   weekTemplateFromWeek,
+  defaultKeeper,
 } from '../src/domain/logic'
 import { atTime } from '../src/lib/dates'
 import type {
@@ -493,5 +494,19 @@ describe('galleryItems', () => {
     ]
     const items = galleryItems([], messages)
     expect(items.every((i) => i.caption === undefined)).toBe(true)
+  })
+})
+
+describe('defaultKeeper', () => {
+  const member = (id: string, role: 'owner' | 'member' | 'guest', rank: number) => ({
+    id, householdId: 'hh', name: id, emoji: '🦊', color: '#000',
+    role, priorityRank: rank, createdAt: '2026-01-01T00:00:00.000Z',
+  })
+  it('retourne le propriétaire (gardien par défaut, sans durée déterminée)', () => {
+    const members = [member('lea', 'member', 0), member('bastien', 'owner', 1)]
+    expect(defaultKeeper(members)?.id).toBe('bastien')
+  })
+  it('retourne undefined sans propriétaire', () => {
+    expect(defaultKeeper([member('lea', 'member', 0)])).toBeUndefined()
   })
 })

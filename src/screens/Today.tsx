@@ -29,6 +29,7 @@ import { provider } from '../data'
 import {
   activeCarePeriod,
   daySlotViews,
+  defaultKeeper,
   exhaustedSwaps,
   nextCarePeriod,
   nextCascadeTarget,
@@ -149,20 +150,22 @@ function CareCard({ snap, me, now }: { snap: AppSnapshot; me: Member; now: Date 
   const [confirmRelay, setConfirmRelay] = useState(false)
 
   if (!care) {
+    // Sans garde planifiée, le chien est chez son propriétaire par défaut.
+    const owner = defaultKeeper(snap.members)
     return (
       <Card className="mt-2 flex items-center gap-3" onClick={() => navigate('/planning')}>
-        <span className="text-3xl" aria-hidden>
-          🏡
-        </span>
+        {owner ? <Avatar member={owner} size="lg" /> : <span className="text-3xl" aria-hidden>🏡</span>}
         <div className="flex-1">
-          <p className="font-bold">Personne ne garde {snap.pet.name} en ce moment</p>
-          <p className="text-sm text-bark-500 dark:text-bark-400">
+          <p className="text-lg font-extrabold">
+            {owner ? `${owner.name} garde ${snap.pet.name}` : `Personne ne garde ${snap.pet.name}`}
+          </p>
+          <p className="text-sm font-semibold text-bark-500 dark:text-bark-400">
             {next
-              ? `Prochaine garde : ${memberById(snap, next.memberId)?.name} dès ${formatInstant(next.startAt)}`
-              : 'Ajoute une période de garde dans le planning.'}
+              ? `Jusqu’à la garde de ${memberById(snap, next.memberId)?.name} (${formatInstant(next.startAt)})`
+              : 'Par défaut, sans durée déterminée 🏡'}
           </p>
         </div>
-        <ChevronRight className="size-5 text-bark-400" aria-hidden />
+        <ChevronRight className="size-5 shrink-0 text-bark-400" aria-hidden />
       </Card>
     )
   }

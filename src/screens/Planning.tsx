@@ -22,7 +22,7 @@ import {
   cx,
 } from '../components/ui'
 import { provider } from '../data'
-import { activeTemplates, carePeriodsOfWeek, findWalkSlot } from '../domain/logic'
+import { activeTemplates, carePeriodsOfWeek, defaultKeeper, findWalkSlot } from '../domain/logic'
 import type { AppSnapshot, CarePeriod, Member, SlotTemplate } from '../domain/types'
 import {
   addDaysStr,
@@ -184,14 +184,20 @@ function CareStrip({
   const periods = carePeriodsOfWeek(snap.carePeriods, monday)
 
   if (periods.length === 0) {
+    const owner = defaultKeeper(snap.members)
     return (
       <Card className="flex items-center gap-3">
-        <span className="text-2xl" aria-hidden>
-          🏡
-        </span>
+        {owner ? (
+          <Avatar member={owner} size="md" />
+        ) : (
+          <span className="text-2xl" aria-hidden>
+            🏡
+          </span>
+        )}
         <p className="text-sm font-semibold text-bark-500 dark:text-bark-400">
-          Personne ne garde {snap.pet.name} cette semaine — ajoute une garde pour que tout le monde
-          sache chez qui il est.
+          {owner
+            ? `Par défaut, ${snap.pet.name} est chez ${owner.name} 🏡 — ajoute une garde quand quelqu’un d’autre le prend.`
+            : `Personne ne garde ${snap.pet.name} cette semaine — ajoute une garde pour que tout le monde sache chez qui il est.`}
         </p>
       </Card>
     )

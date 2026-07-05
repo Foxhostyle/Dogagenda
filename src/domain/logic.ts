@@ -141,6 +141,14 @@ export function activeCarePeriod(periods: CarePeriod[], at: Date): CarePeriod | 
   return periods.find((p) => parseIso(p.startAt) <= at && at < parseIso(p.endAt))
 }
 
+/**
+ * Gardien par défaut : sans période de garde en cours, le chien est chez son
+ * propriétaire, sans durée déterminée.
+ */
+export function defaultKeeper(members: Member[]): Member | undefined {
+  return membersByPriority(members).find((m) => m.role === 'owner')
+}
+
 export function nextCarePeriod(periods: CarePeriod[], at: Date): CarePeriod | undefined {
   return periods
     .filter((p) => parseIso(p.startAt) > at)
