@@ -42,7 +42,7 @@ import {
 import { memberById, useActiveMember, useApp } from '../store/useApp'
 import { tryAction, useToasts } from '../store/useToasts'
 
-type Scope = 'one' | 'template' | 'week'
+type Scope = 'one' | 'template' | 'day' | 'week'
 
 /** « matin » → « matins », « après-midi » → « après-midis » (déjà en -s : inchangé). */
 function pluralizeSlot(name: string): string {
@@ -431,6 +431,12 @@ function WeekGrid({
       if (scope === 'one') {
         await provider.assignWalk(target.date, target.template.id, memberId)
         toast(memberId ? 'Créneau assigné' : 'Créneau libéré', memberId ? '👍' : '👌')
+      } else if (scope === 'day') {
+        // Tous les créneaux du jour choisi.
+        await provider.assignWalks(
+          templates.map((t) => ({ date: target.date, slotTemplateId: t.id, memberId: memberId! })),
+        )
+        toast('Journée assignée', '👍')
       } else {
         const slotIds = scope === 'template' ? [target.template.id] : templates.map((t) => t.id)
         await provider.assignWalks(
@@ -495,10 +501,11 @@ function WeekGrid({
               <p className="mb-1.5 px-1 text-sm font-bold text-bark-700 dark:text-bark-300">
                 Appliquer à
               </p>
-              <div className="flex gap-1 rounded-2xl bg-bark-100 p-1 dark:bg-night-800">
+              <div className="grid grid-cols-2 gap-1 rounded-2xl bg-bark-100 p-1 dark:bg-night-800">
                 {(
                   [
                     { value: 'one', label: 'Ce créneau' },
+                    { value: 'day', label: 'Toute la journée' },
                     { value: 'template', label: `Tous les ${pluralizeSlot(target.template.name)}` },
                     { value: 'week', label: 'Toute la semaine' },
                   ] as const
@@ -520,7 +527,9 @@ function WeekGrid({
               </div>
               {scope !== 'one' && (
                 <p className="mt-1.5 px-1 text-xs text-bark-500">
-                  Le membre choisi sera assigné sur les 7 jours de la semaine affichée.
+                  {scope === 'day'
+                    ? `Le membre choisi sera assigné sur tous les créneaux du ${formatDayShort(target.date)}.`
+                    : 'Le membre choisi sera assigné sur les 7 jours de la semaine affichée.'}
                 </p>
               )}
             </div>
