@@ -79,6 +79,18 @@ await page.getByRole('button', { name: 'Envoyer la demande' }).click()
 await settle()
 check(await page.getByText(/en attente de Léa/).isVisible(), 'Demande en attente de Léa')
 
+// --- 5 bis. Commenter une promenade → privé entre intervenant et propriétaire --
+await page.getByLabel("Plus d'options").first().click()
+await settle()
+await page.getByRole('button', { name: /Commenter dans la discussion/ }).click()
+await settle()
+check(await page.getByText(/En privé avec Léa/).isVisible(), 'Commentaire ouvert en privé avec Léa')
+check(await page.getByText(/En réponse à/).isVisible(), 'Contexte de promenade attaché au commentaire')
+await page.getByLabel('Retirer le contexte').click()
+await settle()
+await page.getByRole('button', { name: 'Famille' }).click()
+await settle()
+
 // --- 6. Discussion : messages système + envoi texte et photo ------------------
 await page.getByRole('link', { name: 'Discussion' }).click()
 await settle()

@@ -26,12 +26,16 @@ export default function Chat() {
   const firstScroll = useRef(true)
   const stagedUrl = usePhotoUrl(photo)
 
-  // Un commentaire de promenade (« Commenter dans la discussion ») vise
-  // toujours le fil familial.
+  // Un commentaire de promenade (« Commenter dans la discussion ») ouvre la
+  // conversation privée avec le membre visé (?to=…) — typiquement entre
+  // l'intervenant et le propriétaire — sinon le fil familial.
   const hasRefParams = searchParams.has('date')
+  const toParam = searchParams.get('to')
   useEffect(() => {
-    if (hasRefParams) setConversation('family')
-  }, [hasRefParams])
+    if (!hasRefParams) return
+    if (toParam && snap?.members.some((m) => m.id === toParam)) setConversation(toParam)
+    else setConversation('family')
+  }, [hasRefParams, toParam, snap])
 
   const visibleCount =
     snap && me ? conversationMessages(snap.messages, me.id, conversation).length : 0
@@ -71,8 +75,8 @@ export default function Chat() {
         text: body,
         ...(photo ? { photo } : {}),
         ...(isFamily ? {} : { recipientId: conversation }),
-        ...(isFamily && refDate ? { refDate } : {}),
-        ...(isFamily && refDate && refSlotTemplateId ? { refSlotTemplateId } : {}),
+        ...(refDate ? { refDate } : {}),
+        ...(refDate && refSlotTemplateId ? { refSlotTemplateId } : {}),
       })
       setText('')
       setPhoto(undefined)

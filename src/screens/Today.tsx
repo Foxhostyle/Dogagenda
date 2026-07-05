@@ -560,7 +560,17 @@ function SlotCard({
           <Button
             variant="soft"
             fullWidth
-            onClick={() => navigate(`/discussion?date=${date}&slot=${template.id}`)}
+            onClick={() => {
+              // Le commentaire se fait en privé entre l'intervenant et le
+              // propriétaire (ou, pour le propriétaire, avec la personne
+              // concernée par la promenade).
+              const other =
+                me.role !== 'owner'
+                  ? defaultKeeper(snap.members)?.id
+                  : (slot?.validatedBy ?? slot?.assignedMemberId)
+              const to = other && other !== me.id ? `&to=${other}` : ''
+              navigate(`/discussion?date=${date}&slot=${template.id}${to}`)
+            }}
           >
             <MessageCircle className="size-5" aria-hidden /> Commenter dans la discussion
           </Button>
