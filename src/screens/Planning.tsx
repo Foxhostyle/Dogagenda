@@ -101,8 +101,13 @@ export default function Planning() {
       ) : (
         <>
           <SectionTitle>Les promenades de la semaine</SectionTitle>
-          <WeekActions snap={snap} monday={monday} />
-          <WeekGrid snap={snap} monday={monday} templates={templates} />
+          {me.role === 'owner' && <WeekActions snap={snap} monday={monday} />}
+          <WeekGrid
+            snap={snap}
+            monday={monday}
+            templates={templates}
+            isOwner={me.role === 'owner'}
+          />
         </>
       )}
 
@@ -409,10 +414,12 @@ function WeekGrid({
   snap,
   monday,
   templates,
+  isOwner,
 }: {
   snap: AppSnapshot
   monday: DateStr
   templates: SlotTemplate[]
+  isOwner: boolean
 }) {
   const toast = useToasts((s) => s.push)
   const [target, setTarget] = useState<{ date: DateStr; template: SlotTemplate } | null>(null)
@@ -473,6 +480,7 @@ function WeekGrid({
                   snap={snap}
                   date={date}
                   template={t}
+                  interactive={isOwner}
                   onOpen={() => openPicker(date, t)}
                 />
               ))}
@@ -544,11 +552,14 @@ function SlotChip({
   snap,
   date,
   template,
+  interactive,
   onOpen,
 }: {
   snap: AppSnapshot
   date: DateStr
   template: SlotTemplate
+  /** Seul le propriétaire peut modifier les affectations. */
+  interactive: boolean
   onOpen: () => void
 }) {
   const slot = findWalkSlot(snap.walkSlots, date, template.id)
@@ -559,10 +570,15 @@ function SlotChip({
   return (
     <button
       type="button"
+      disabled={!interactive}
       onClick={onOpen}
       title={`${template.name} · ${hours}`}
-      aria-label={`${template.name} (${hours}) — ${assigned ? `assigné à ${assigned.name}` : 'personne'}${done ? ', promenade validée' : ''}`}
-      className="relative flex flex-1 flex-col items-center gap-1 rounded-2xl bg-bark-50 px-1 py-2 active:bg-sage-50 dark:bg-night-800 dark:active:bg-night-800/60"
+      aria-label={`${template.name} (${hours}) — ${assigned ? `assigné à ${assigned.name}` : 'personne'}${done ? ', promenade validée' : ''}${interactive ? '' : ' (assignation réservée au propriétaire)'}`}
+      className={cx(
+        'relative flex flex-1 flex-col items-center gap-1 rounded-2xl bg-bark-50 px-1 py-2 dark:bg-night-800',
+        interactive && 'active:bg-sage-50 dark:active:bg-night-800/60',
+        !interactive && 'cursor-default',
+      )}
     >
       <span className="text-base leading-none" aria-hidden>
         {template.emoji}

@@ -196,6 +196,17 @@ check(
   !(await banner.getByText(/Bastien cherche un remplaçant/).isVisible().catch(() => false)),
   'Après refus de Léa, la bannière passe au suivant',
 )
+// Léa n'est pas propriétaire : l'assignation des créneaux lui est fermée
+check(
+  (await page.getByLabel('Changer le promeneur').count()) === 0,
+  'Assignation des créneaux réservée au propriétaire (Aujourd’hui)',
+)
+await page.getByRole('link', { name: 'Planning' }).click()
+await settle()
+check(
+  !(await page.getByRole('button', { name: /Dupliquer la semaine précédente/ }).isVisible().catch(() => false)),
+  'Outils de planification réservés au propriétaire (Planning)',
+)
 await page.getByRole('link', { name: 'Wint' }).click()
 await settle()
 await page.getByRole('button', { name: 'Changer de membre (démo)' }).click()

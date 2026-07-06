@@ -418,9 +418,19 @@ function SlotCard({
           <p className="font-extrabold">{template.name}</p>
           <p className="text-xs font-semibold text-bark-500 dark:text-bark-400">{hours}</p>
         </div>
-        {status === 'done' || status === 'skipped' ? (
+        {/* Seul le propriétaire peut changer qui est sur un créneau. */}
+        {status === 'done' || status === 'skipped' || me.role !== 'owner' ? (
           <span className="flex items-center gap-1.5 px-2 py-1">
-            {assigned && <MemberTag member={assigned} />}
+            {assigned ? (
+              <MemberTag member={assigned} />
+            ) : (
+              status !== 'done' &&
+              status !== 'skipped' && (
+                <span className="inline-flex items-center gap-1 text-sm font-semibold text-bark-400">
+                  <UserRound className="size-4" aria-hidden /> Personne
+                </span>
+              )
+            )}
           </span>
         ) : (
           <button
